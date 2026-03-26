@@ -8,6 +8,7 @@ from shutil import get_terminal_size
 from textwrap import shorten, wrap
 from typing import Callable
 
+from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
 from .ocr import OCRResult, run_ocr
@@ -16,8 +17,8 @@ from .utils import format_size_change, resolve_incremental_output_path, resolve_
 
 EXIT_COMMANDS = {"exit", "quit", ":q"}
 APP_NAME = "PyDF Tool"
-APP_TAGLINE = "terminal PDF workflow"
-APP_SUMMARY = "OCR, compressione, salvataggio guidato e annullamento con Ctrl+C."
+APP_TAGLINE = "strumenti PDF da terminale"
+APP_SUMMARY = "OCR di PDF scansionati, compressione, verifica testo ricercabile."
 MENU_TEXT_WIDTH = 34
 DETAIL_TEXT_WIDTH = 68
 
@@ -207,18 +208,18 @@ def _wrap_dialog_text(lines: list[str], width: int) -> str:
 def _home_actions() -> list[MenuAction]:
     return [
         MenuAction(
-            key="ocr",
-            title="OCR assistito",
-            summary="PDF scansionato -> PDF ricercabile o TXT",
+            key="ocr_tool",
+            title="Strumento OCR",
+            summary="Verifica e conversione di PDF scansionati",
             detail=(
-                "Renderizza le pagine, applica Tesseract e mostra avanzamento "
-                "pagina per pagina."
+                "Verifica se il PDF ha gia testo ricercabile, "
+                "oppure avvia l'OCR per renderlo ricercabile o esportarlo in TXT."
             ),
-            example="pydf-tool ocr scansione.pdf --lang it+en --output scansione.txt",
+            example="pydf-tool check doc.pdf  /  pydf-tool ocr doc.pdf --lang it",
         ),
         MenuAction(
             key="compress",
-            title="Compressione",
+            title="Comprimi PDF",
             summary="Preset, livello custom e modalita bianco e nero",
             detail=(
                 "Usa Ghostscript con avanzamento live, delta dimensione e "
@@ -251,6 +252,18 @@ def _home_actions() -> list[MenuAction]:
             example="Premi Q oppure Esc.",
         ),
     ]
+
+
+def _show_ocr_submenu() -> str | None:
+    """Sottomenu Strumento OCR. Ritorna 'check', 'ocr', o None se annullato."""
+    return _ask_choice(
+        "Strumento OCR",
+        "Cosa vuoi fare?",
+        [
+            ("check", "Verifica OCR · controlla se il PDF ha gia testo ricercabile"),
+            ("ocr", "Esegui OCR · converti PDF scansionato in PDF ricercabile o TXT"),
+        ],
+    )
 
 
 def _show_home_menu() -> str | None:
@@ -481,9 +494,10 @@ def _show_help_screen() -> None:
         [
             "Flussi supportati",
             "",
-            "- OCR: PDF scansionato -> PDF ricercabile o file .txt",
-            "- Compressione: preset low / medium / high o livello numerico 1-100",
-            "- Compressione in bianco e nero: opzionale e non attiva di default",
+            "- Strumento OCR > Verifica OCR: analizza se il PDF ha gia testo ricercabile",
+            "- Strumento OCR > Esegui OCR: converti PDF scansionato in PDF o TXT",
+            "- Comprimi PDF: preset low / medium / high o livello numerico 1-100",
+            "- Comprimi PDF in bianco e nero: opzionale, non attiva di default",
             "- Comando libero: incolla una riga come `ocr file.pdf --lang it`",
             "",
             "Controlli",
@@ -496,8 +510,9 @@ def _show_help_screen() -> None:
             "",
             "Suggerimenti",
             "",
-            "- OCR in `.txt`: scegli il formato TXT nel flusso guidato",
-            "- Compressione custom: scegli `custom` e inserisci un valore 1-100",
+            "- Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo",
+            "- Esegui OCR in TXT: scegli formato TXT nel flusso guidato",
+            "- Comprimi PDF custom: scegli `custom` e inserisci un valore 1-100",
             "- Salvataggio custom: scegli prima la cartella e poi il nome file",
             "- Se annulli una compressione, il file parziale viene rimosso.",
         ],
@@ -508,6 +523,49 @@ def _show_help_screen() -> None:
         body=HSplit(
             [
                 Label(text=help_text),
+                Label(
+                    text="Invio o Esc chiudono questa schermata.",
+                    style="class:dialog_hint",
+                ),
+            ],
+            padding=1,
+        ),
+        buttons=[],
+        with_background=True,
+        width=D(preferred=dialog_width),
+    )
+    kb = KeyBindings()
+
+    @kb.add("enter")
+    @kb.add("escape")
+    @kb.add("q")
+    def _close(event) -> None:
+        event.app.exit(result=None)
+
+    Application(
+        layout=Layout(dialog.container),
+        key_bindings=kb,
+        style=_dialog_style(),
+        full_screen=True,
+        mouse_support=True,
+    ).run()
+
+
+def _show_info_dialog(title: str, text: str) -> None:
+    toolkit = _load_prompt_toolkit()
+    Application = toolkit["Application"]
+    D = toolkit["D"]
+    Dialog = toolkit["Dialog"]
+    HSplit = toolkit["HSplit"]
+    KeyBindings = toolkit["KeyBindings"]
+    Label = toolkit["Label"]
+    Layout = toolkit["Layout"]
+    dialog_width = _dialog_width(72, minimum=44)
+    dialog = Dialog(
+        title=title,
+        body=HSplit(
+            [
+                Label(text=text),
                 Label(
                     text="Invio o Esc chiudono questa schermata.",
                     style="class:dialog_hint",
@@ -581,13 +639,16 @@ def _ask_text(title: str, text: str, default: str = "") -> str | None:
     def _cancel(event) -> None:
         event.app.exit(result=None)
 
-    return Application(
+    result = Application(
         layout=Layout(dialog.container, focused_element=textfield),
         key_bindings=kb,
         style=_dialog_style(),
         full_screen=True,
         mouse_support=True,
     ).run()
+    if isinstance(result, str):
+        result = result.strip()
+    return result
 
 
 def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | None:
@@ -697,13 +758,16 @@ def _prompt_output_path(
     return str(output_path)
 
 
-def _prompt_ocr_args() -> argparse.Namespace | None:
-    input_path = _ask_text("OCR assistito", "Percorso del PDF di input")
+def _prompt_ocr_args(input_path_default: str = "") -> argparse.Namespace | None:
+    input_path = _ask_text("Esegui OCR", "Percorso del PDF di input", default=input_path_default)
+    if not input_path:
+        return None
+    input_path = _clean_path_input(input_path)
     if not input_path:
         return None
 
     lang = _ask_choice(
-        "OCR assistito",
+        "Esegui OCR",
         "Lingua OCR",
         [
             ("it", "Italiano"),
@@ -715,7 +779,7 @@ def _prompt_ocr_args() -> argparse.Namespace | None:
         return None
 
     output_format = _ask_choice(
-        "OCR assistito",
+        "Esegui OCR",
         "Formato di output",
         [
             ("pdf", "PDF ricercabile"),
@@ -726,7 +790,7 @@ def _prompt_ocr_args() -> argparse.Namespace | None:
         return None
 
     output = _prompt_output_path(
-        "OCR assistito",
+        "Esegui OCR",
         input_path,
         ".txt" if output_format == "txt" else ".pdf",
     )
@@ -737,12 +801,15 @@ def _prompt_ocr_args() -> argparse.Namespace | None:
 
 
 def _prompt_compress_args() -> argparse.Namespace | None:
-    input_path = _ask_text("Compressione", "Percorso del PDF di input")
+    input_path = _ask_text("Comprimi PDF", "Percorso del PDF di input")
+    if not input_path:
+        return None
+    input_path = _clean_path_input(input_path)
     if not input_path:
         return None
 
     level = _ask_choice(
-        "Compressione",
+        "Comprimi PDF",
         "Livello di compressione",
         [
             ("low", "low · compressione leggera"),
@@ -755,7 +822,7 @@ def _prompt_compress_args() -> argparse.Namespace | None:
         return None
     if level == "custom":
         custom_level = _ask_text(
-            "Compressione",
+            "Comprimi PDF",
             "Valore custom tra 1 e 100",
         )
         if not custom_level:
@@ -763,7 +830,7 @@ def _prompt_compress_args() -> argparse.Namespace | None:
         level = custom_level
 
     color_mode = _ask_choice(
-        "Compressione",
+        "Comprimi PDF",
         "Modalita colore",
         [
             ("color", "A colori"),
@@ -773,7 +840,7 @@ def _prompt_compress_args() -> argparse.Namespace | None:
     if not color_mode:
         return None
 
-    output = _prompt_output_path("Compressione", input_path, ".pdf")
+    output = _prompt_output_path("Comprimi PDF", input_path, ".pdf")
     if output is None:
         return None
 
@@ -783,6 +850,74 @@ def _prompt_compress_args() -> argparse.Namespace | None:
         output=output,
         grayscale=color_mode == "grayscale",
     )
+
+
+def _prompt_check_args() -> argparse.Namespace | None:
+    input_path = _ask_text("Verifica OCR", "Percorso del PDF da analizzare")
+    if not input_path:
+        return None
+    input_path = _clean_path_input(input_path)
+    if not input_path:
+        return None
+    return argparse.Namespace(input=input_path)
+
+
+def _show_check_result(result: CheckOCRResult, input_path: str) -> str | None:
+    verdetti = {
+        "ocr_needed": "OCR necessario — nessuna pagina ha testo ricercabile.",
+        "already_searchable": "Gia ricercabile — OCR non necessario.",
+        "mixed": (
+            f"Misto — {result.pages_without_text} pagine su "
+            f"{result.pages_total} senza testo ricercabile."
+        ),
+    }
+    verdict_text = verdetti[result.verdict]
+    col_w = 22
+    lines = [
+        f"{'Pagine totali':<{col_w}}{result.pages_total}",
+        f"{'Pagine con testo':<{col_w}}{result.pages_with_text}",
+        f"{'Pagine senza testo':<{col_w}}{result.pages_without_text}",
+        f"{'Media caratteri/pag.':<{col_w}}{result.chars_per_page_avg:.0f}",
+        "",
+        f"Verdetto: {verdict_text}",
+    ]
+    body_text = "\n".join(lines)
+
+    if result.verdict in {"ocr_needed", "mixed"}:
+        return _ask_choice(
+            "Verifica OCR — risultato",
+            body_text,
+            [
+                ("ocr", "Esegui OCR su questo file"),
+                ("no", "Torna al menu"),
+            ],
+        )
+    else:
+        _show_info_dialog("Verifica OCR — risultato", body_text)
+        return None
+
+
+def _run_check_interactive(args: argparse.Namespace) -> int:
+    try:
+        result = check_ocr(args.input)
+    except PDFToolError as exc:
+        _show_error(str(exc))
+        return 1
+
+    action = _show_check_result(result, str(args.input))
+    if action == "ocr":
+        ocr_args = _prompt_ocr_args(input_path_default=str(args.input))
+        if ocr_args is not None:
+            return _run_ocr_interactive(ocr_args)
+    return 0
+
+
+def _clean_path_input(path: str) -> str:
+    """Rimuove whitespace e virgolette circostanti da un path incollato nella TUI."""
+    path = path.strip()
+    if len(path) >= 2 and path[0] in ('"', "'") and path[-1] == path[0]:
+        path = path[1:-1].strip()
+    return path
 
 
 def _prompt_manual_command() -> str | None:
@@ -919,7 +1054,7 @@ def _run_with_progress(
 
 def _run_ocr_interactive(args: argparse.Namespace) -> int:
     result = _run_with_progress(
-        "OCR assistito",
+        "Esegui OCR",
         lambda progress_callback: run_ocr(
             input_path=args.input,
             output_path=args.output,
@@ -927,12 +1062,12 @@ def _run_ocr_interactive(args: argparse.Namespace) -> int:
             progress_callback=progress_callback,
         ),
     )
-    return 0 if result is not None else 0
+    return 0 if result is not None else 1
 
 
 def _run_compress_interactive(args: argparse.Namespace) -> int:
     result = _run_with_progress(
-        "Compressione PDF",
+        "Comprimi PDF",
         lambda progress_callback: compress_pdf(
             input_path=args.input,
             output_path=args.output,
@@ -941,7 +1076,7 @@ def _run_compress_interactive(args: argparse.Namespace) -> int:
             progress_callback=progress_callback,
         ),
     )
-    return 0 if result is not None else 0
+    return 0 if result is not None else 1
 
 
 def dispatch_interactive_command(
@@ -970,6 +1105,9 @@ def dispatch_interactive_command(
         return 0
     if command == "interactive":
         return 0
+    if command == "check" and len(tokens) == 1:
+        args = _prompt_check_args()
+        return 0 if args is None else _run_check_interactive(args)
     if command == "ocr" and len(tokens) == 1:
         args = _prompt_ocr_args()
         return 0 if args is None else _run_ocr_interactive(args)
@@ -985,6 +1123,8 @@ def dispatch_interactive_command(
             "Comando non valido. Usa il menu guidato oppure apri Help."
         ) from exc
 
+    if args.command == "check":
+        return _run_check_interactive(args)
     if args.command == "ocr":
         return _run_ocr_interactive(args)
     if args.command == "compress":
@@ -1010,10 +1150,16 @@ def run_interactive_app(
         if action == "help":
             _show_help_screen()
             continue
-        if action == "ocr":
-            args = _prompt_ocr_args()
-            if args is not None:
-                _run_ocr_interactive(args)
+        if action == "ocr_tool":
+            sub = _show_ocr_submenu()
+            if sub == "check":
+                args = _prompt_check_args()
+                if args is not None:
+                    _run_check_interactive(args)
+            elif sub == "ocr":
+                args = _prompt_ocr_args()
+                if args is not None:
+                    _run_ocr_interactive(args)
             continue
         if action == "compress":
             args = _prompt_compress_args()
