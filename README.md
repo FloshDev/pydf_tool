@@ -1,47 +1,41 @@
 # PyDF Tool
 
-`PyDF Tool` e un progetto di vibe coding in Python, orientato a macOS, con un obiettivo pratico: rendere semplice il trattamento di PDF scansionati e pesanti da terminale o da TUI.
+> **Progetto in sviluppo attivo.** Funziona, ma comandi, opzioni e comportamenti possono cambiare tra una versione e l’altra. Non considerare ancora l’interfaccia come stabile.
 
-Al momento il progetto punta a due funzioni principali:
+`pydf-tool` è un tool da terminale per macOS pensato per semplificare due operazioni comuni sui PDF: l’OCR di documenti scansionati e la compressione di file pesanti. Disponibile sia come CLI diretta che come TUI interattiva.
 
-- OCR di PDF scansionati, con output in PDF ricercabile o testo semplice
-- compressione PDF su macOS, con preset e livello di compressione personalizzabile
+-----
 
-Il progetto e in evoluzione. Interfaccia, comandi e dettagli di comportamento possono cambiare mentre la base funzionale si stabilizza.
+## Stato del progetto
 
-## Overview
+Il progetto è funzionale nelle sue due aree principali — OCR e compressione — ma è ancora in evoluzione. La struttura dei comandi, le opzioni disponibili e i dettagli di comportamento possono variare mentre la base si stabilizza. Se usi il tool regolarmente, verifica il comportamento dopo ogni aggiornamento.
 
-`pydf-tool` e il comando principale.
-
-Modalita disponibili:
-
-- TUI interattiva, avviata con `pydf-tool`
-- CLI diretta con sottocomandi espliciti
-
-Funzioni supportate oggi:
-
-- `check` — verifica se un PDF ha già testo ricercabile
-- `ocr` — OCR di PDF scansionati
-- `compress` — compressione PDF
+-----
 
 ## Prerequisiti
 
-Questo progetto e pensato per macOS.
+macOS con Python 3.10 o superiore.
 
-Serve Python 3.10 o superiore.
+Per verificare la versione di Python installata:
 
-Dipendenze di sistema richieste tramite Homebrew:
+```bash
+python3 --version
+```
+
+Dipendenze di sistema tramite Homebrew:
 
 ```bash
 brew install tesseract tesseract-lang poppler ghostscript
 ```
 
-Ruolo dei componenti esterni:
+|Componente      |Ruolo                                      |
+|----------------|-------------------------------------------|
+|`tesseract`     |Esegue l’OCR                               |
+|`tesseract-lang`|Fornisce i dati lingua aggiuntivi          |
+|`poppler`       |Strumenti usati internamente da `pdf2image`|
+|`ghostscript`   |Motore di compressione PDF                 |
 
-- `tesseract` esegue l'OCR
-- `tesseract-lang` fornisce i dati lingua aggiuntivi
-- `poppler` fornisce gli strumenti usati da `pdf2image`
-- `ghostscript` viene usato per la compressione PDF
+-----
 
 ## Installazione
 
@@ -51,96 +45,96 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Se il progetto era gia installato in precedenza, riesegui `pip install -e .` dopo eventuali aggiornamenti del codice.
-
-Verifica rapida del comando:
+Per verificare che il comando sia disponibile:
 
 ```bash
 pydf-tool --help
 ```
 
-Avvio della TUI:
+Se il progetto era già installato in precedenza, riesegui `pip install -e .` dopo aggiornamenti del codice.
+
+-----
+
+## Funzioni disponibili
+
+|Comando   |Descrizione                                                           |
+|----------|----------------------------------------------------------------------|
+|`check`   |Verifica se un PDF ha già testo ricercabile                           |
+|`ocr`     |OCR di PDF scansionati, con output in PDF ricercabile o testo semplice|
+|`compress`|Compressione PDF con preset o livello personalizzabile                |
+
+-----
+
+## Utilizzo
+
+### TUI interattiva
+
+Avvia `pydf-tool` senza argomenti per aprire l’interfaccia interattiva:
 
 ```bash
 pydf-tool
 ```
 
-## Uso ad Alto Livello
+Navigazione:
 
-### TUI interattiva
-
-Lancia `pydf-tool` senza argomenti per aprire l'interfaccia interattiva. Da li puoi scegliere OCR, compressione, help e comandi liberi.
-
-Nella TUI:
-
-- usa `↑/↓` per navigare
-- usa `Enter` per confermare
-- usa `Esc` per annullare o uscire dai dialog
-- usa `H` o `F1` per aprire l'help
-- usa `Ctrl+C` per interrompere un'operazione in corso
+- `↑/↓` — navigare tra le opzioni
+- `Enter` — confermare
+- `Esc` — annullare o uscire dai dialog
+- `H` o `F1` — aprire l’help
+- `Ctrl+C` — interrompere un’operazione in corso
 
 ### CLI diretta
 
-Usa i sottocomandi quando vuoi eseguire un'operazione precisa senza passare dalla TUI.
+Usa i sottocomandi per eseguire un’operazione specifica senza passare dalla TUI.
 
-Verifica OCR:
+**Verifica:**
 
 ```bash
 pydf-tool check documento.pdf
 ```
 
-OCR:
+**OCR:**
 
 ```bash
-pydf-tool ocr input.pdf --lang it --output output.pdf
-```
+# Output in PDF ricercabile
+pydf-tool ocr scansione.pdf --lang it --output output.pdf
 
-Compressione:
-
-```bash
-pydf-tool compress input.pdf --level medium --output output.pdf
-```
-
-## Esempi Principali
-
-OCR in PDF ricercabile:
-
-```bash
-pydf-tool ocr scansione.pdf --lang it
-```
-
-OCR in testo semplice:
-
-```bash
+# Output in testo semplice
 pydf-tool ocr scansione.pdf --lang it+en --output scansione.txt
 ```
 
-Compressione con preset:
+**Compressione:**
 
 ```bash
-pydf-tool compress documento.pdf --level low
-```
+# Preset predefiniti: low, medium, high
+pydf-tool compress documento.pdf --level medium --output output.pdf
 
-Compressione con livello custom:
-
-```bash
+# Livello personalizzato (valore numerico)
 pydf-tool compress documento.pdf --level 65 --output documento-small.pdf
-```
 
-Compressione con variante in bianco e nero:
-
-```bash
+# Conversione in bianco e nero durante la compressione
 pydf-tool compress documento.pdf --level medium --grayscale
 ```
 
-Se `--output` non viene specificato, il file viene salvato nella stessa cartella dell'input con un nome incrementale.
+Se `--output` non viene specificato, il file viene salvato nella stessa cartella dell’input con un nome incrementale.
 
-## Note Sullo Stato Del Progetto
+-----
 
-- Il progetto e in fase di evoluzione e non va considerato ancora una CLI definitiva.
-- Le due aree su cui si concentra oggi sono OCR e compressione PDF.
-- La TUI e la CLI esistono entrambe, ma possono cambiare layout, opzioni o flussi di interazione.
-- Se usi il progetto per lavoro quotidiano, conviene verificare il comportamento dopo ogni aggiornamento.
+## Troubleshooting
+
+**`pydf-tool: command not found`**
+Il virtual environment non è attivo. Esegui `source .venv/bin/activate` e riprova.
+
+**`tesseract: command not found` o `gs: command not found`**
+Le dipendenze di sistema non sono installate o non sono nel PATH. Verifica con `brew list` e reinstalla se necessario.
+
+**Il PDF non viene riconosciuto dall’OCR**
+Alcuni PDF sono protetti da password o hanno un encoding non standard. Verifica prima con `pydf-tool check documento.pdf`.
+
+**La compressione non riduce il file in modo significativo**
+Se il PDF contiene già immagini molto compresse o testo vettoriale, i margini di riduzione sono limitati. Prova con `--level high` o `--grayscale`.
+
+-----
 
 ## Sviluppo
 
