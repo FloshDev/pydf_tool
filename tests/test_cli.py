@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import types
+import unicodedata
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -19,6 +20,7 @@ from pdf_tool.errors import PDFToolError
 from pdf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
 from pdf_tool.ocr import run_ocr
 from pdf_tool.tui import _dialog_width, _wrap_dialog_text
+from pdf_tool.utils import ensure_pdf_input, resolve_user_path
 
 
 class OCRHelpersTestCase(unittest.TestCase):
@@ -49,6 +51,42 @@ class TUIHelpersTestCase(unittest.TestCase):
         self.assertIn("\n  scegli custom", wrapped)
 
 
+class PathNormalizationTestCase(unittest.TestCase):
+    def test_ensure_pdf_input_accepts_unicode_normalization_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            actual_dir = Path(temp_dir, unicodedata.normalize("NFD", "Università"))
+            actual_dir.mkdir()
+            actual_file = actual_dir / "slide.pdf"
+            actual_file.write_bytes(b"%PDF-1.4")
+
+            requested_path = Path(
+                temp_dir,
+                unicodedata.normalize("NFC", "Università"),
+                "slide.pdf",
+            )
+
+            resolved_path = ensure_pdf_input(requested_path)
+
+            self.assertTrue(resolved_path.exists())
+            self.assertTrue(resolved_path.samefile(actual_file))
+
+    def test_resolve_user_path_normalizes_existing_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            actual_dir = Path(temp_dir, unicodedata.normalize("NFD", "Università"))
+            actual_dir.mkdir()
+
+            requested_path = Path(
+                temp_dir,
+                unicodedata.normalize("NFC", "Università"),
+                "out.pdf",
+            )
+            resolved_path = resolve_user_path(requested_path)
+
+            self.assertTrue(resolved_path.parent.exists())
+            self.assertTrue(resolved_path.parent.samefile(actual_dir))
+            self.assertEqual(resolved_path.name, "out.pdf")
+
+
 class CompressionHelpersTestCase(unittest.TestCase):
     def test_resolve_compression_profile_supports_numeric_level(self) -> None:
         low_strength = resolve_compression_profile("10")
@@ -72,7 +110,14 @@ class CompressionHelpersTestCase(unittest.TestCase):
 
             def fake_run(command, check, capture_output, text):
                 captured["command"] = command
-                output_path.write_bytes(b"small")
+                staged_output = Path(
+                    next(
+                        part.split("=", 1)[1]
+                        for part in command
+                        if part.startswith("-sOutputFile=")
+                    )
+                )
+                staged_output.write_bytes(b"small")
                 return None
 
             with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
@@ -82,7 +127,10 @@ class CompressionHelpersTestCase(unittest.TestCase):
         self.assertEqual(result.output_path, output_path)
         self.assertFalse(result.grayscale)
         self.assertIn("-dPDFSETTINGS=/screen", captured["command"])
-        self.assertIn(f"-sOutputFile={output_path}", captured["command"])
+        staged_output_arg = next(
+            part for part in captured["command"] if part.startswith("-sOutputFile=")
+        )
+        self.assertNotEqual(staged_output_arg, f"-sOutputFile={output_path}")
 
     def test_compress_pdf_adds_grayscale_flags(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -93,7 +141,14 @@ class CompressionHelpersTestCase(unittest.TestCase):
 
             def fake_run(command, check, capture_output, text):
                 captured["command"] = command
-                output_path.write_bytes(b"small")
+                staged_output = Path(
+                    next(
+                        part.split("=", 1)[1]
+                        for part in command
+                        if part.startswith("-sOutputFile=")
+                    )
+                )
+                staged_output.write_bytes(b"small")
                 return None
 
             with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
@@ -158,6 +213,37 @@ class CompressionHelpersTestCase(unittest.TestCase):
         self.assertEqual(result.output_path, output_path)
         self.assertTrue(any(update.stage == "compress" for update in updates))
         self.assertTrue(any(update.completed == 2 for update in updates))
+
+    def test_compress_pdf_uses_staged_paths_for_unicode_locations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            unicode_dir = Path(temp_dir, unicodedata.normalize("NFD", "Università"))
+            unicode_dir.mkdir()
+            input_path = unicode_dir / "input.pdf"
+            output_path = unicode_dir / "output.pdf"
+            input_path.write_bytes(b"original-pdf")
+            captured: dict[str, list[str]] = {}
+
+            def fake_run(command, check, capture_output, text):
+                captured["command"] = command
+                staged_output = Path(
+                    next(
+                        part.split("=", 1)[1]
+                        for part in command
+                        if part.startswith("-sOutputFile=")
+                    )
+                )
+                staged_output.write_bytes(b"small")
+                return None
+
+            with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
+                with patch("pdf_tool.compress.subprocess.run", side_effect=fake_run):
+                    result = compress_pdf(input_path, output_path, level="medium")
+
+            self.assertEqual(result.output_path, output_path)
+            self.assertTrue(result.output_path.exists())
+            self.assertTrue(result.output_path.samefile(output_path))
+            self.assertIn("input.pdf", captured["command"][-1])
+            self.assertNotEqual(captured["command"][-1], str(input_path))
 
 
 class OCRRuntimeTestCase(unittest.TestCase):

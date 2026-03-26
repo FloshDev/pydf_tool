@@ -1,12 +1,47 @@
 from __future__ import annotations
 
+import unicodedata
 from pathlib import Path
 
 from .errors import PDFToolError
 
 
+_UNICODE_NORMALIZATION_FORMS = ("NFC", "NFD", "NFKC", "NFKD")
+
+
+def _resolve_existing_path_variant(path: Path) -> Path | None:
+    if path.exists():
+        return path
+
+    raw_value = str(path)
+    seen = {raw_value}
+    for form in _UNICODE_NORMALIZATION_FORMS:
+        normalized = unicodedata.normalize(form, raw_value)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        candidate = Path(normalized)
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def resolve_user_path(path: str | Path) -> Path:
+    candidate = Path(path).expanduser()
+    existing_variant = _resolve_existing_path_variant(candidate)
+    if existing_variant is not None:
+        return existing_variant
+
+    if candidate.parent != candidate:
+        normalized_parent = _resolve_existing_path_variant(candidate.parent)
+        if normalized_parent is not None:
+            return normalized_parent / candidate.name
+
+    return candidate
+
+
 def ensure_pdf_input(path: str | Path) -> Path:
-    input_path = Path(path).expanduser()
+    input_path = resolve_user_path(path)
     if not input_path.exists():
         raise PDFToolError(f"File di input non trovato: {input_path}")
     if input_path.suffix.lower() != ".pdf":
@@ -21,12 +56,15 @@ def ensure_distinct_paths(input_path: Path, output_path: Path) -> None:
 
 def resolve_incremental_output_path(input_path: Path, extension: str) -> Path:
     normalized_extension = extension if extension.startswith(".") else f".{extension}"
-    base_name = input_path.stem
+    resolved_input_path = resolve_user_path(input_path)
+    base_name = resolved_input_path.stem
 
-    input_resolved = input_path.resolve(strict=False)
+    input_resolved = resolved_input_path.resolve(strict=False)
     counter = 1
     while True:
-        candidate = input_path.with_name(f"{base_name}.{counter}{normalized_extension}")
+        candidate = resolved_input_path.with_name(
+            f"{base_name}.{counter}{normalized_extension}"
+        )
         if candidate.resolve(strict=False) != input_resolved and not candidate.exists():
             return candidate
         counter += 1

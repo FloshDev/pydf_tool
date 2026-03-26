@@ -24,13 +24,17 @@ La TUI e volutamente minimalista, con estetica pulita e focus keyboard-first, is
 - Compressione supportata: preset espliciti, livello numerico `1-100` e opzione opt-in in bianco e nero
 - Default compression: salvataggio nella stessa cartella dell input con nome incrementale come `documento.1.pdf`
 - Output personalizzato: da TUI o CLI si puo scegliere cartella e nome file
+- Normalizzazione path macOS Unicode: input e output passano da `resolve_user_path()` per gestire casi tipo `Università` salvata in forma Unicode diversa
+- Compressione Ghostscript: l output viene prima scritto in una directory temporanea sicura e poi spostato nel path finale
 - Help disponibile sia come `-h/--help` sia come `pydf-tool help [ocr|compress|interactive]`
 - TUI con:
   - home menu a frecce `up/down`
   - schermata help dedicata
   - layout home responsive che passa da split a stack su terminali piu stretti
+  - home compatta su terminali bassi, con priorita alla visibilita di tutte le azioni del menu
   - preview essenziale della voce selezionata
   - dialog keyboard-first: `Enter` conferma, `Esc` annulla
+  - radio list che conferma anche al click del mouse
   - progress live
   - annullamento con `Ctrl+C`
 
@@ -104,11 +108,13 @@ Struttura interna:
 - `_show_home_menu()`:
   - costruisce la home full-screen con `prompt_toolkit`
   - adatta il layout in base alla larghezza del terminale
+  - compatta il layout in base all altezza del terminale
   - usa keybindings `up`, `down`, `enter`, `h`, `f1`, `q`, `escape`
 - `_show_help_screen()`:
   - mostra una vista help dedicata con testo adattato alla larghezza disponibile
 - `_prompt_ocr_args()` / `_prompt_compress_args()`:
   - raccolgono input utente tramite dialog keyboard-first
+  - le radio list confermano su `Enter` e su click mouse
 - `dispatch_interactive_command()`:
   - interpreta comandi manuali tipo `ocr file.pdf --lang it`
 - `_run_with_progress()`:
@@ -182,6 +188,8 @@ Funzioni chiave:
 - `compress_pdf()`:
   - controlla il binario `gs`
   - costruisce il comando Ghostscript
+  - se il path di input contiene caratteri Unicode problematici per `gs`, copia l input in una directory temporanea ASCII-safe
+  - scrive sempre l output Ghostscript in un file temporaneo e poi lo sposta nel path finale
   - in modalita non-interattiva usa `subprocess.run(...)`
   - in modalita TUI usa `subprocess.Popen(...)`
   - intercetta righe tipo `Page N` da stdout per aggiornare la progress bar
@@ -205,6 +213,7 @@ E volutamente minimale ed e usato sia da `ocr.py` sia da `compress.py`.
 
 Helper condivisi:
 
+- `resolve_user_path()`
 - `ensure_pdf_input()`
 - `ensure_distinct_paths()`
 - `resolve_incremental_output_path()`
@@ -305,8 +314,11 @@ Percorso `.pdf`:
 validate input
 -> validate output
 -> resolve profile
+-> normalize input/output path
+-> optional copy of input to temp path
 -> build Ghostscript command
 -> execute gs
+-> move temp output to final destination
 -> compute size delta
 ```
 
@@ -416,9 +428,15 @@ Copertura attuale:
 - dispatch di comandi dentro la TUI
 - helper OCR
 - helper compressione
+- normalizzazione path Unicode su macOS
+- staging temporaneo Ghostscript per path Unicode
 - emissione eventi progress
 - costruzione del comando Ghostscript
 - invarianti del bootstrap script
+
+Stato suite al momento dell ultimo aggiornamento:
+
+- `30` test `unittest` verdi
 
 Comando test:
 
@@ -492,6 +510,24 @@ Toccare:
 - I test non eseguono OCR/compressione reali: mockano le dipendenze esterne.
 - La CLI diretta mostra output finale ma non usa la progress grafica di `rich`; la progress completa e disponibile nella TUI.
 - Il supporto OCR lato CLI e limitato volontariamente a `it`, `en`, `it+en`, anche se Tesseract puo avere piu lingue installate.
+- OCR reali su PDF grandi possono essere lenti: l assenza di output immediato non implica necessariamente un errore.
+- Il sandbox di sviluppo usato da Codex non puo verificare scritture reali dentro `~/Documents`; i test end-to-end su path utente vanno confermati sulla macchina locale fuori sandbox.
+- Ghostscript puo produrre file piu grandi dell originale, specialmente con PDF gia ottimizzati o poco comprimibili.
+
+## Recent Session Notes
+
+Aggiornamenti tecnici dell ultima sessione:
+
+- corretto il bug di path Unicode su macOS per input/output con cartelle come `Università`
+- corretta la compressione su path Unicode spostando la scrittura Ghostscript su file temporaneo
+- verificata da CLI reale la compressione del PDF utente verso `/tmp`
+- la TUI e stata resa piu compatta su terminali bassi e piu chiara nell uso di tastiera e mouse
+
+Punti ancora da verificare con priorita alta sulla macchina utente:
+
+- OCR end-to-end reale sul PDF utente, fino alla creazione del file finale
+- scrittura finale dentro la cartella originale dell utente fuori dal sandbox Codex
+- flusso TUI completo per OCR e compressione con path Unicode e salvataggio custom
 
 ## Practical Handoff Notes For REPORT VIBE CODING
 
@@ -532,7 +568,7 @@ Lo stato attuale e pronto per una pubblicazione iniziale, con una nota important
 Sequenza consigliata:
 
 ```bash
-cd "/Users/flosh/Desktop/CLI PDF Tool"
+cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
 git init -b main
 git status --short
 git status --ignored --short
@@ -560,4 +596,8 @@ Ultimo assetto verificato localmente:
 - TUI avviabile
 - navigazione a frecce verificata
 - repaint della selezione verificato
+- menu compatto verificato su terminale basso
+- dialog radio confermati sia da tastiera sia da click
 - comando `pydf-tool` installato e funzionante
+- compressione CLI reale verificata sul PDF utente con output in `/tmp`
+- normalizzazione path Unicode verificata con test unitari e check diretto del path utente

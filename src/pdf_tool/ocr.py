@@ -11,6 +11,7 @@ from .progress import OperationProgress
 from .utils import (
     ensure_distinct_paths,
     ensure_pdf_input,
+    resolve_user_path,
     resolve_incremental_output_path,
 )
 
@@ -75,7 +76,7 @@ def resolve_ocr_output_path(input_path: Path, output: str | Path | None) -> Path
     if output is None:
         output_path = resolve_incremental_output_path(input_path, ".pdf")
     else:
-        output_path = Path(output).expanduser()
+        output_path = resolve_user_path(output)
         if not output_path.suffix:
             output_path = output_path.with_suffix(".pdf")
 

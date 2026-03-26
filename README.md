@@ -1,73 +1,46 @@
 # PyDF Tool
 
-`PyDF Tool` e una CLI per macOS scritta in Python. Il comando da terminale e `pydf-tool`.
+`PyDF Tool` e un progetto di vibe coding in Python, orientato a macOS, con un obiettivo pratico: rendere semplice il trattamento di PDF scansionati e pesanti da terminale o da TUI.
 
-Supporta due modalita:
+Al momento il progetto punta a due funzioni principali:
 
-- modalita interattiva TUI, avviata con `pydf-tool`
-- modalita diretta con sottocomandi espliciti
+- OCR di PDF scansionati, con output in PDF ricercabile o testo semplice
+- compressione PDF su macOS, con preset e livello di compressione personalizzabile
 
-Funzioni principali:
+Il progetto e in evoluzione. Interfaccia, comandi e dettagli di comportamento possono cambiare mentre la base funzionale si stabilizza.
 
-- `ocr`: converte un PDF scansionato in un PDF con testo selezionabile oppure in un file `.txt`
-- `compress`: comprime un PDF con preset espliciti o livello numerico custom, con opzione opt-in per output in bianco e nero
+## Overview
 
-## Funzionalita
+`pydf-tool` e il comando principale.
 
-### OCR
+Modalita disponibili:
 
-Il comando `ocr` usa `pdf2image` per rasterizzare ogni pagina del PDF e `pytesseract` per riconoscere il testo.
+- TUI interattiva, avviata con `pydf-tool`
+- CLI diretta con sottocomandi espliciti
 
-- Output supportati: `.pdf` ricercabile oppure `.txt`
-- Lingue supportate dalla CLI: `it`, `en`, `it+en`
-- Default output: nella stessa cartella dell input, con nome incrementale come `documento.1.pdf`
-- Dalla TUI puoi scegliere cartella e nome del file di output
+Funzioni supportate oggi:
 
-### Compressione
+- `ocr`
+- `compress`
 
-Il comando `compress` usa Ghostscript per generare una versione piu leggera del PDF.
+## Prerequisiti
 
-- Preset espliciti: `low`, `medium`, `high`
-- Livello numerico custom: intero tra `1` e `100`
-- Opzione opt-in per comprimere in bianco e nero
-- Default output: nella stessa cartella dell input, con nome incrementale come `documento.1.pdf`
-- Dalla TUI puoi scegliere cartella e nome del file di output
-- Mostra dimensione prima e dopo l operazione
+Questo progetto e pensato per macOS.
 
-Nota sul livello numerico:
+Serve Python 3.10 o superiore.
 
-- `1` = compressione minima, qualita piu alta
-- `100` = compressione massima, file piu piccolo
-
-### TUI interattiva
-
-La modalita `pydf-tool` senza argomenti apre una TUI full-screen minimalista, ispirata a Claude, con:
-
-- layout pulito e focalizzato, pensato per terminale
-- layout responsive che si adatta meglio anche a finestre piu strette
-- menu home navigabile con frecce `↑/↓`
-- preview laterale essenziale della voce selezionata
-- schermata help dedicata richiamabile dal menu o con `H` / `F1`
-- wizard guidati per OCR e compressione
-- dialog guidati keyboard-first: `Enter` conferma, `Esc` annulla
-- salvataggio custom di cartella + nome file
-- progresso live durante le operazioni
-- annullamento con `Ctrl+C` durante OCR e compressione
-
-## Prerequisiti di sistema
-
-Su macOS installa le dipendenze richieste con Homebrew:
+Dipendenze di sistema richieste tramite Homebrew:
 
 ```bash
 brew install tesseract tesseract-lang poppler ghostscript
 ```
 
-Perche servono:
+Ruolo dei componenti esterni:
 
-- `tesseract`: motore OCR
-- `tesseract-lang`: dati lingua aggiuntivi, necessari per l italiano
-- `poppler`: fornisce `pdftoppm` e `pdftocairo`, usati da `pdf2image`
-- `ghostscript`: motore usato dal comando `compress` e dalla variante opt-in in bianco e nero
+- `tesseract` esegue l'OCR
+- `tesseract-lang` fornisce i dati lingua aggiuntivi
+- `poppler` fornisce gli strumenti usati da `pdf2image`
+- `ghostscript` viene usato per la compressione PDF
 
 ## Installazione
 
@@ -77,96 +50,92 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Se hai gia installato una versione precedente, riesegui `pip install -e .` per
-aggiornare le dipendenze Python e il launcher `pydf-tool`.
+Se il progetto era gia installato in precedenza, riesegui `pip install -e .` dopo eventuali aggiornamenti del codice.
 
-Verifica rapida dell entrypoint dopo l installazione:
+Verifica rapida del comando:
 
 ```bash
 pydf-tool --help
-pydf-tool help
 ```
 
-Per entrare nella shell interattiva:
+Avvio della TUI:
 
 ```bash
 pydf-tool
 ```
 
-## Utilizzo
+## Uso ad Alto Livello
 
-### Modalita interattiva
+### TUI interattiva
 
-Avvia la TUI:
+Lancia `pydf-tool` senza argomenti per aprire l'interfaccia interattiva. Da li puoi scegliere OCR, compressione, help e comandi liberi.
 
-```bash
-pydf-tool
-```
+Nella TUI:
 
-Oppure in modo esplicito:
+- usa `↑/↓` per navigare
+- usa `Enter` per confermare
+- usa `Esc` per annullare o uscire dai dialog
+- usa `H` o `F1` per aprire l'help
+- usa `Ctrl+C` per interrompere un'operazione in corso
 
-```bash
-pydf-tool interactive
-```
+### CLI diretta
 
-Per l aiuto generale o contestuale:
+Usa i sottocomandi quando vuoi eseguire un'operazione precisa senza passare dalla TUI.
 
-```bash
-pydf-tool help
-pydf-tool help ocr
-pydf-tool help compress
-```
-
-Dentro la TUI puoi:
-
-- usare `↑/↓` per muoverti nel menu home
-- premere `Enter` per aprire l azione selezionata
-- premere `H` o `F1` per l help
-- premere `Q` o `Esc` per uscire
-- usare `Enter` per confermare e `Esc` per annullare dentro i dialog guidati
-- usare il menu `Comando libero` per eseguire un comando completo come `ocr scansione.pdf --lang it`
-- premere `Ctrl+C` per annullare OCR o compressione in corso
-
-### OCR in PDF ricercabile
+OCR:
 
 ```bash
 pydf-tool ocr input.pdf --lang it --output output.pdf
 ```
 
-### OCR in testo semplice
-
-```bash
-pydf-tool ocr input.pdf --lang it+en --output output.txt
-```
-
-Se `--output` non viene specificato, la CLI salva il file nella stessa cartella dell input con nome incrementale, ad esempio `input.1.pdf`.
-
-### Compressione con preset
+Compressione:
 
 ```bash
 pydf-tool compress input.pdf --level medium --output output.pdf
 ```
 
-### Compressione con livello custom
+## Esempi Principali
 
-```bash
-pydf-tool compress input.pdf --level 80 --output output.pdf
-pydf-tool compress input.pdf --level medium --grayscale
-```
-
-Se `--output` non viene specificato, la CLI salva il file nella stessa cartella dell input con nome incrementale, ad esempio `input.1.pdf`.
-
-## Esempi rapidi
+OCR in PDF ricercabile:
 
 ```bash
 pydf-tool ocr scansione.pdf --lang it
-pydf-tool ocr scansione.pdf --lang en --output scansione.txt
+```
+
+OCR in testo semplice:
+
+```bash
+pydf-tool ocr scansione.pdf --lang it+en --output scansione.txt
+```
+
+Compressione con preset:
+
+```bash
 pydf-tool compress documento.pdf --level low
-pydf-tool compress documento.pdf --level medium --grayscale
+```
+
+Compressione con livello custom:
+
+```bash
 pydf-tool compress documento.pdf --level 65 --output documento-small.pdf
 ```
 
-## Sviluppo e test
+Compressione con variante in bianco e nero:
+
+```bash
+pydf-tool compress documento.pdf --level medium --grayscale
+```
+
+Se `--output` non viene specificato, il file viene salvato nella stessa cartella dell'input con un nome incrementale.
+
+## Note Sullo Stato Del Progetto
+
+- Il progetto e in fase di evoluzione e non va considerato ancora una CLI definitiva.
+- Le due aree su cui si concentra oggi sono OCR e compressione PDF.
+- La TUI e la CLI esistono entrambe, ma possono cambiare layout, opzioni o flussi di interazione.
+- Se usi il progetto per lavoro quotidiano, conviene verificare il comportamento dopo ogni aggiornamento.
+
+## Sviluppo
 
 Esegui i test locali con:
 

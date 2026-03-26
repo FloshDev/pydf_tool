@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,7 @@ from .progress import OperationProgress
 from .utils import (
     ensure_distinct_paths,
     ensure_pdf_input,
+    resolve_user_path,
     resolve_incremental_output_path,
 )
 
@@ -97,7 +99,7 @@ def resolve_compress_output_path(input_path: Path, output: str | Path | None) ->
     if output is None:
         output_path = resolve_incremental_output_path(input_path, ".pdf")
     else:
-        output_path = Path(output).expanduser()
+        output_path = resolve_user_path(output)
         if not output_path.suffix:
             output_path = output_path.with_suffix(".pdf")
 
@@ -126,6 +128,8 @@ def compress_pdf(
 
     profile = resolve_compression_profile(level)
     size_before = source.stat().st_size
+    staged_source = source
+    staged_destination = destination
     page_count: int | None = None
     if progress_callback is not None:
         try:
@@ -150,7 +154,19 @@ def compress_pdf(
             total=page_count,
         )
 
-    command = [
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        temp_dir = tempfile.TemporaryDirectory(prefix="pydf-tool-gs-")
+        staged_destination = Path(temp_dir.name) / "compressed-output.pdf"
+
+        try:
+            source_text = str(source)
+            source_text.encode("ascii")
+        except UnicodeEncodeError:
+            staged_source = Path(temp_dir.name) / "input.pdf"
+            shutil.copy2(source, staged_source)
+
+        command = [
         "gs",
         "-sDEVICE=pdfwrite",
         "-dCompatibilityLevel=1.4",
@@ -161,126 +177,138 @@ def compress_pdf(
         "-dCompressFonts=true",
         "-dSubsetFonts=true",
         "-dEmbedAllFonts=true",
-    ]
+        ]
 
-    if grayscale:
+        if grayscale:
+            command.extend(
+                [
+                    "-sColorConversionStrategy=Gray",
+                    "-sColorConversionStrategyForImages=Gray",
+                    "-dProcessColorModel=/DeviceGray",
+                ]
+            )
+
         command.extend(
             [
-                "-sColorConversionStrategy=Gray",
-                "-sColorConversionStrategyForImages=Gray",
-                "-dProcessColorModel=/DeviceGray",
+                "-dDownsampleColorImages=true",
+                "-dDownsampleGrayImages=true",
+                "-dDownsampleMonoImages=true",
+                "-dColorImageDownsampleType=/Bicubic",
+                "-dGrayImageDownsampleType=/Bicubic",
+                "-dMonoImageDownsampleType=/Subsample",
+                "-dColorImageDownsampleThreshold=1.0",
+                "-dGrayImageDownsampleThreshold=1.0",
+                "-dMonoImageDownsampleThreshold=1.0",
+                f"-dColorImageResolution={profile.dpi}",
+                f"-dGrayImageResolution={profile.dpi}",
+                f"-dMonoImageResolution={profile.dpi}",
+                f"-dPDFSETTINGS={profile.pdf_setting}",
+                f"-sOutputFile={staged_destination}",
+                str(staged_source),
             ]
         )
 
-    command.extend(
-        [
-            "-dDownsampleColorImages=true",
-            "-dDownsampleGrayImages=true",
-            "-dDownsampleMonoImages=true",
-            "-dColorImageDownsampleType=/Bicubic",
-            "-dGrayImageDownsampleType=/Bicubic",
-            "-dMonoImageDownsampleType=/Subsample",
-            "-dColorImageDownsampleThreshold=1.0",
-            "-dGrayImageDownsampleThreshold=1.0",
-            "-dMonoImageDownsampleThreshold=1.0",
-            f"-dColorImageResolution={profile.dpi}",
-            f"-dGrayImageResolution={profile.dpi}",
-            f"-dMonoImageResolution={profile.dpi}",
-            f"-dPDFSETTINGS={profile.pdf_setting}",
-            f"-sOutputFile={destination}",
-            str(source),
-        ]
-    )
-
-    if progress_callback is None:
-        quiet_command = command.copy()
-        quiet_command.insert(4, "-dQUIET")
-        try:
-            subprocess.run(quiet_command, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as exc:
-            details = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-            raise PDFToolError(f"Compressione fallita: {details}") from exc
-    else:
-        process: subprocess.Popen[str] | None = None
-        output_chunks: list[str] = []
-        current_page = 0
-        try:
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            _emit_progress(
-                progress_callback,
-                stage="compress",
-                message=(
-                    "Compressione in corso"
-                    + (" in bianco e nero" if grayscale else "")
-                ),
-                completed=0,
-                total=page_count,
-            )
-
-            if process.stdout is not None:
-                for line in process.stdout:
-                    output_chunks.append(line)
-                    match = re.search(r"\bPage\s+(\d+)\b", line)
-                    if match:
-                        current_page = int(match.group(1))
-                        _emit_progress(
-                            progress_callback,
-                            stage="compress",
-                            message=(
-                                f"Compressione pagina {current_page}/"
-                                f"{page_count if page_count is not None else '?'}"
-                            ),
-                            completed=current_page,
-                            total=page_count,
-                        )
-
-            return_code = process.wait()
-            if return_code != 0:
-                raise subprocess.CalledProcessError(
-                    return_code,
+        if progress_callback is None:
+            quiet_command = command.copy()
+            quiet_command.insert(4, "-dQUIET")
+            try:
+                subprocess.run(quiet_command, check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as exc:
+                details = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+                raise PDFToolError(f"Compressione fallita: {details}") from exc
+        else:
+            process: subprocess.Popen[str] | None = None
+            output_chunks: list[str] = []
+            current_page = 0
+            try:
+                process = subprocess.Popen(
                     command,
-                    output="".join(output_chunks),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
                 )
-        except KeyboardInterrupt:
-            if process is not None and process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
-            if destination.exists():
-                destination.unlink(missing_ok=True)
-            raise
-        except subprocess.CalledProcessError as exc:
-            if destination.exists():
-                destination.unlink(missing_ok=True)
-            details = (exc.output or "").strip() or str(exc)
-            raise PDFToolError(f"Compressione fallita: {details}") from exc
-        finally:
-            if process is not None and process.stdout is not None:
-                process.stdout.close()
+                _emit_progress(
+                    progress_callback,
+                    stage="compress",
+                    message=(
+                        "Compressione in corso"
+                        + (" in bianco e nero" if grayscale else "")
+                    ),
+                    completed=0,
+                    total=page_count,
+                )
 
-    if not destination.exists():
-        raise PDFToolError("Compressione fallita: file di output non generato.")
+                if process.stdout is not None:
+                    for line in process.stdout:
+                        output_chunks.append(line)
+                        match = re.search(r"\bPage\s+(\d+)\b", line)
+                        if match:
+                            current_page = int(match.group(1))
+                            _emit_progress(
+                                progress_callback,
+                                stage="compress",
+                                message=(
+                                    f"Compressione pagina {current_page}/"
+                                    f"{page_count if page_count is not None else '?'}"
+                                ),
+                                completed=current_page,
+                                total=page_count,
+                            )
 
-    size_after = destination.stat().st_size
-    _emit_progress(
-        progress_callback,
-        stage="done",
-        message="Compressione completata",
-        completed=page_count or 0,
-        total=page_count,
-    )
-    return CompressionResult(
-        output_path=destination,
-        level=profile.label,
-        grayscale=grayscale,
-        size_before=size_before,
-        size_after=size_after,
-    )
+                return_code = process.wait()
+                if return_code != 0:
+                    raise subprocess.CalledProcessError(
+                        return_code,
+                        command,
+                        output="".join(output_chunks),
+                    )
+            except KeyboardInterrupt:
+                if process is not None and process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                if staged_destination.exists():
+                    staged_destination.unlink(missing_ok=True)
+                raise
+            except subprocess.CalledProcessError as exc:
+                if staged_destination.exists():
+                    staged_destination.unlink(missing_ok=True)
+                details = (exc.output or "").strip() or str(exc)
+                raise PDFToolError(f"Compressione fallita: {details}") from exc
+            finally:
+                if process is not None and process.stdout is not None:
+                    process.stdout.close()
+
+        if not staged_destination.exists():
+            raise PDFToolError("Compressione fallita: file di output non generato.")
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.move(str(staged_destination), str(destination))
+        except (OSError, shutil.Error) as exc:
+            raise PDFToolError(
+                f"Scrittura del file compresso fallita: {destination}"
+            ) from exc
+
+        destination = resolve_user_path(destination)
+        size_after = destination.stat().st_size
+        _emit_progress(
+            progress_callback,
+            stage="done",
+            message="Compressione completata",
+            completed=page_count or 0,
+            total=page_count,
+        )
+        return CompressionResult(
+            output_path=destination,
+            level=profile.label,
+            grayscale=grayscale,
+            size_before=size_before,
+            size_after=size_after,
+        )
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()

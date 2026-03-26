@@ -12,7 +12,7 @@ from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
 from .ocr import OCRResult, run_ocr
 from .progress import OperationProgress
-from .utils import format_size_change, resolve_incremental_output_path
+from .utils import format_size_change, resolve_incremental_output_path, resolve_user_path
 
 EXIT_COMMANDS = {"exit", "quit", ":q"}
 APP_NAME = "PyDF Tool"
@@ -163,6 +163,13 @@ def _terminal_columns(default: int = 120) -> int:
         return default
 
 
+def _terminal_rows(default: int = 24) -> int:
+    try:
+        return get_terminal_size((120, default)).lines
+    except OSError:
+        return default
+
+
 def _dialog_width(preferred: int, minimum: int = 48, margin: int = 6) -> int:
     columns = _terminal_columns()
     return max(minimum, min(preferred, max(minimum, columns - margin)))
@@ -262,11 +269,15 @@ def _show_home_menu() -> str | None:
     actions = _home_actions()
     state = {"index": 0}
 
-    def _header_state() -> tuple[str, list[str]]:
+    def _screen_metrics() -> tuple[int, int]:
         try:
-            columns = get_app().output.get_size().columns
+            size = get_app().output.get_size()
+            return size.columns, size.rows
         except Exception:
-            columns = _terminal_columns()
+            return _terminal_columns(), _terminal_rows()
+
+    def _header_state() -> tuple[str, list[str]]:
+        columns, _ = _screen_metrics()
 
         line_width = max(20, columns - 2)
         tagline_width = max(0, line_width - len(APP_NAME) - 2)
@@ -294,24 +305,25 @@ def _show_home_menu() -> str | None:
             always_hide_cursor=True,
         )
 
-    def _layout_metrics() -> tuple[bool, int, int]:
-        try:
-            columns = get_app().output.get_size().columns
-        except Exception:
-            columns = 120
+    def _layout_metrics() -> tuple[bool, int, int, int, bool, bool]:
+        columns, rows = _screen_metrics()
+        compact = rows < 26
+        show_detail = rows >= 22
 
-        if columns >= 110:
+        if columns >= 110 and show_detail:
             menu_width = min(40, max(32, columns // 3))
             detail_width = max(28, columns - menu_width - 6)
-            return True, menu_width, detail_width
+            return True, menu_width, detail_width, rows, compact, show_detail
 
         stacked_width = max(28, columns - 4)
-        return False, stacked_width, stacked_width
+        return False, stacked_width, stacked_width, rows, compact, show_detail
 
     def _menu_fragments():
-        _, menu_width, _ = _layout_metrics()
+        _, menu_width, _, _, compact, _ = _layout_metrics()
         text_width = max(18, menu_width - 4)
-        fragments: list[tuple[str, str]] = [("class:home_section", "Azioni\n\n")]
+        section_gap = "\n" if compact else "\n\n"
+        item_gap = "\n" if compact else "\n\n"
+        fragments: list[tuple[str, str]] = [("class:home_section", "Azioni" + section_gap)]
         for index, action in enumerate(actions):
             selected = index == state["index"]
             marker_style = "class:home_marker_active" if selected else "class:home_marker"
@@ -323,22 +335,24 @@ def _show_home_menu() -> str | None:
             fragments.append((marker_style, indicator))
             fragments.append((title_style, _fit_line(action.title, text_width) + "\n"))
             fragments.append(
-                (summary_style, "  " + _fit_line(action.summary, text_width) + "\n\n")
+                (summary_style, "  " + _fit_line(action.summary, text_width) + item_gap)
             )
         return fragments
 
     def _detail_fragments():
         action = actions[state["index"]]
-        _, _, detail_width = _layout_metrics()
+        _, _, detail_width, _, compact, _ = _layout_metrics()
+        detail_lines = 2 if compact else 3
+        command_lines = 1 if compact else 2
         fragments: list[tuple[str, str]] = [("class:detail_section", "Anteprima\n\n")]
         for line in _wrap_lines(action.title, detail_width, 1):
             fragments.append(("class:detail_heading", line + "\n"))
         fragments.append(("class:detail_text", "\n"))
-        for line in _wrap_lines(action.detail, detail_width, 3):
+        for line in _wrap_lines(action.detail, detail_width, detail_lines):
             fragments.append(("class:detail_text", line + "\n"))
         fragments.append(("class:detail_text", "\n"))
         fragments.append(("class:detail_label", "Comando\n"))
-        for line in _wrap_lines(action.example, detail_width, 2):
+        for line in _wrap_lines(action.example, detail_width, command_lines):
             fragments.append(("class:detail_code", line + "\n"))
         return fragments
 
@@ -375,12 +389,15 @@ def _show_home_menu() -> str | None:
         event.app.exit(result="help")
 
     def _home_body():
-        wide, menu_width, _ = _layout_metrics()
+        wide, menu_width, _, _, _, show_detail = _layout_metrics()
         menu_window = Window(
             width=menu_width,
             content=FormattedTextControl(_menu_fragments),
             always_hide_cursor=True,
         )
+        if not show_detail:
+            return menu_window
+
         detail_window = Window(
             content=FormattedTextControl(_detail_fragments),
             always_hide_cursor=True,
@@ -578,6 +595,7 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
     Application = toolkit["Application"]
     D = toolkit["D"]
     Dialog = toolkit["Dialog"]
+    get_app = toolkit["get_app"]
     HSplit = toolkit["HSplit"]
     KeyBindings = toolkit["KeyBindings"]
     Label = toolkit["Label"]
@@ -585,6 +603,16 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
     RadioList = toolkit["RadioList"]
 
     radio_list = RadioList(values=values)
+    original_handle_enter = radio_list._handle_enter
+
+    def _commit_selection() -> None:
+        original_handle_enter()
+        try:
+            get_app().exit(result=radio_list.current_value)
+        except Exception:
+            pass
+
+    radio_list._handle_enter = _commit_selection
     dialog_width = _dialog_width(72, minimum=44)
     dialog = Dialog(
         title=title,
@@ -593,7 +621,7 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
                 Label(text=text),
                 radio_list,
                 Label(
-                    text="Frecce navigano  Invio conferma  Esc annulla",
+                    text="Frecce navigano  Invio o click confermano  Esc annulla",
                     style="class:dialog_hint",
                 ),
             ],
@@ -604,10 +632,6 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
         width=D(preferred=dialog_width),
     )
     kb = KeyBindings()
-
-    @kb.add("enter")
-    def _confirm(event) -> None:
-        event.app.exit(result=radio_list.current_value)
 
     @kb.add("escape")
     @kb.add("c-c")
@@ -628,7 +652,7 @@ def _prompt_output_path(
     input_path: str,
     default_extension: str,
 ) -> str | None:
-    source_path = Path(input_path).expanduser()
+    source_path = resolve_user_path(input_path)
     suggested_path = resolve_incremental_output_path(source_path, default_extension)
     save_mode = _ask_choice(
         title,
@@ -667,7 +691,7 @@ def _prompt_output_path(
     if file_name is None or not file_name.strip():
         return None
 
-    output_path = Path(destination_dir).expanduser() / file_name.strip()
+    output_path = resolve_user_path(destination_dir) / file_name.strip()
     if not output_path.suffix:
         output_path = output_path.with_suffix(default_extension)
     return str(output_path)
