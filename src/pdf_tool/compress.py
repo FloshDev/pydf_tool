@@ -210,7 +210,7 @@ def compress_pdf(
 
         if progress_callback is None:
             quiet_command = command.copy()
-            quiet_command.insert(4, "-dQUIET")
+            quiet_command.append("-dQUIET")
             try:
                 subprocess.run(quiet_command, check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as exc:

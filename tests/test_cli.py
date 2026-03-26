@@ -10,6 +10,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from pdf_tool.check_ocr import CheckOCRResult, check_ocr
 from pdf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
 from pdf_tool.compress import (
     compress_pdf,
@@ -21,6 +22,101 @@ from pdf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_l
 from pdf_tool.ocr import run_ocr
 from pdf_tool.tui import _dialog_width, _wrap_dialog_text
 from pdf_tool.utils import ensure_pdf_input, resolve_user_path
+
+
+class CheckOCRTestCase(unittest.TestCase):
+    def _make_fake_reader(self, texts_per_page: list[str]):
+        class FakePage:
+            def __init__(self, text: str) -> None:
+                self._text = text
+
+            def extract_text(self) -> str:
+                return self._text
+
+        class FakeReader:
+            def __init__(self, _source) -> None:
+                self.pages = [FakePage(t) for t in texts_per_page]
+
+        return FakeReader
+
+    def test_check_ocr_verdict_ocr_needed(self) -> None:
+        FakeReader = self._make_fake_reader(["", "", ""])
+        fake_pypdf = types.SimpleNamespace(PdfReader=FakeReader)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir, "scan.pdf")
+            input_path.write_bytes(b"%PDF-1.4")
+
+            with patch.dict(sys.modules, {"pypdf": fake_pypdf}):
+                result = check_ocr(input_path)
+
+        self.assertEqual(result.verdict, "ocr_needed")
+        self.assertEqual(result.pages_total, 3)
+        self.assertEqual(result.pages_with_text, 0)
+        self.assertEqual(result.pages_without_text, 3)
+
+    def test_check_ocr_verdict_already_searchable(self) -> None:
+        long_text = "A" * 200
+        FakeReader = self._make_fake_reader([long_text, long_text])
+        fake_pypdf = types.SimpleNamespace(PdfReader=FakeReader)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir, "scan.pdf")
+            input_path.write_bytes(b"%PDF-1.4")
+
+            with patch.dict(sys.modules, {"pypdf": fake_pypdf}):
+                result = check_ocr(input_path)
+
+        self.assertEqual(result.verdict, "already_searchable")
+        self.assertEqual(result.pages_with_text, 2)
+        self.assertEqual(result.pages_without_text, 0)
+
+    def test_check_ocr_verdict_mixed(self) -> None:
+        long_text = "A" * 200
+        FakeReader = self._make_fake_reader([long_text, "", long_text, ""])
+        fake_pypdf = types.SimpleNamespace(PdfReader=FakeReader)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir, "scan.pdf")
+            input_path.write_bytes(b"%PDF-1.4")
+
+            with patch.dict(sys.modules, {"pypdf": fake_pypdf}):
+                result = check_ocr(input_path)
+
+        self.assertEqual(result.verdict, "mixed")
+        self.assertEqual(result.pages_with_text, 2)
+        self.assertEqual(result.pages_without_text, 2)
+
+    def test_check_ocr_chars_per_page_avg(self) -> None:
+        FakeReader = self._make_fake_reader(["A" * 100, "A" * 200])
+        fake_pypdf = types.SimpleNamespace(PdfReader=FakeReader)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir, "scan.pdf")
+            input_path.write_bytes(b"%PDF-1.4")
+
+            with patch.dict(sys.modules, {"pypdf": fake_pypdf}):
+                result = check_ocr(input_path)
+
+        self.assertAlmostEqual(result.chars_per_page_avg, 150.0)
+
+    def test_main_dispatches_check(self) -> None:
+        mock_result = CheckOCRResult(
+            pages_total=3,
+            pages_with_text=0,
+            pages_without_text=3,
+            chars_per_page_avg=0.0,
+            verdict="ocr_needed",
+        )
+        stdout = io.StringIO()
+
+        with patch("pdf_tool.cli.check_ocr", return_value=mock_result):
+            with redirect_stdout(stdout):
+                exit_code = main(["check", "scan.pdf"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OCR necessario", stdout.getvalue())
+        self.assertIn("3", stdout.getvalue())
 
 
 class OCRHelpersTestCase(unittest.TestCase):
@@ -242,8 +338,10 @@ class CompressionHelpersTestCase(unittest.TestCase):
             self.assertEqual(result.output_path, output_path)
             self.assertTrue(result.output_path.exists())
             self.assertTrue(result.output_path.samefile(output_path))
-            self.assertIn("input.pdf", captured["command"][-1])
-            self.assertNotEqual(captured["command"][-1], str(input_path))
+            positional_args = [p for p in captured["command"] if not p.startswith("-")]
+            source_arg = positional_args[-1]  # last positional is the source file
+            self.assertIn("input.pdf", source_arg)
+            self.assertNotEqual(source_arg, str(input_path))
 
 
 class OCRRuntimeTestCase(unittest.TestCase):
@@ -300,7 +398,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
             image_to_string=lambda image, lang="": "ciao",
         )
         fake_pdf2image = types.SimpleNamespace(
-            convert_from_path=lambda path, dpi, use_pdftocairo: ["image-1", "image-2"]
+            convert_from_path=lambda path, dpi, use_pdftocairo, first_page=None, last_page=None: ["image-1"]
         )
         fake_pypdf = types.SimpleNamespace(PdfReader=FakePdfReader, PdfWriter=object)
         updates = []
@@ -452,7 +550,7 @@ class CLITestCase(unittest.TestCase):
             exit_code = main(["help"])
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("{ocr,compress,interactive,help}", stdout.getvalue())
+        self.assertIn("{ocr,compress,check,interactive,help}", stdout.getvalue())
 
     def test_main_supports_help_for_specific_subcommand(self) -> None:
         stdout = io.StringIO()
@@ -491,13 +589,15 @@ class CLITestCase(unittest.TestCase):
             progress_callback=unittest.mock.ANY,
         )
 
-    @patch("pdf_tool.tui._show_home_menu", side_effect=["ocr", "exit"])
+    @patch("pdf_tool.tui._show_home_menu", side_effect=["ocr_tool", "exit"])
+    @patch("pdf_tool.tui._show_ocr_submenu", return_value="ocr")
     @patch("pdf_tool.tui._prompt_ocr_args", return_value=argparse.Namespace(input="scan.pdf", lang="it", output=None))
     @patch("pdf_tool.tui._run_ocr_interactive", return_value=0)
     def test_interactive_shell_runs_guided_ocr_flow(
         self,
         mock_run_ocr_interactive,
         _mock_prompt_ocr_args,
+        _mock_show_ocr_submenu,
         _mock_show_home_menu,
     ) -> None:
         exit_code = _run_interactive_shell()
@@ -519,22 +619,19 @@ class CLITestCase(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("--level", stdout.getvalue())
 
-    def test_pyproject_configures_script_file(self) -> None:
+    def test_pyproject_configures_entry_point(self) -> None:
         import tomllib
 
         with Path("pyproject.toml").open("rb") as file_obj:
             pyproject = tomllib.load(file_obj)
 
-        script_files = pyproject["tool"]["setuptools"]["script-files"]
-        self.assertEqual(script_files, ["scripts/pydf-tool"])
+        scripts = pyproject["project"]["scripts"]
+        self.assertEqual(scripts["pydf-tool"], "pdf_tool.cli:main")
 
-    def test_bootstrap_script_uses_shell_wrapper(self) -> None:
-        content = Path("scripts/pydf-tool").read_text(encoding="utf-8")
-        self.assertTrue(content.startswith("#!/bin/sh"))
-        self.assertIn('PDF_TOOL_BOOTSTRAP_SCRIPT="$0"', content)
-        self.assertIn('metadata.distribution("pydf-tool")', content)
-        self.assertIn('"$SCRIPT_DIR/python3" -c', content)
-        self.assertNotIn('<<\'PY\'', content)
+    def test_entry_point_target_is_callable(self) -> None:
+        from pdf_tool.cli import main
+
+        self.assertTrue(callable(main))
 
 
 if __name__ == "__main__":

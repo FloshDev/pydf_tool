@@ -14,12 +14,14 @@ dependencies = [
     "pypdf==6.8.0",
     "pytesseract==0.3.13",
     "rich==13.7.1",
-    "Pillow==12.1.1",
+    "Pillow>=10.3.0,<12.0",
 ]
+
+[project.scripts]
+pydf-tool = "pdf_tool.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-script-files = ["scripts/pydf-tool"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

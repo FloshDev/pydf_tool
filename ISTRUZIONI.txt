@@ -1,0 +1,235 @@
+====================================================
+  PYDF TOOL — ISTRUZIONI D'USO
+====================================================
+
+Cosa fa questo tool:
+  - OCR: converte un PDF scansionato (solo immagini) in un PDF
+    con testo ricercabile, oppure in un file di testo .txt
+  - Compressione: riduce il peso di un PDF con vari livelli
+    di qualità
+
+
+----------------------------------------------------
+  PREREQUISITI (da fare una volta sola)
+----------------------------------------------------
+
+Installa le dipendenze di sistema con Homebrew:
+
+  brew install tesseract tesseract-lang poppler ghostscript
+
+Poi configura il progetto (vedi sezione SETUP più in basso).
+
+
+----------------------------------------------------
+  AVVIO RAPIDO (uso quotidiano)
+----------------------------------------------------
+
+1. Apri il terminale
+2. Spostati nella cartella del progetto:
+
+     cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+
+3. Attiva l'ambiente virtuale:
+
+     source .venv/bin/activate
+
+4. Lancia il tool:
+
+     pydf-tool
+
+Vedrai apparire l'interfaccia interattiva (TUI).
+Da lì puoi fare tutto con le frecce e Invio.
+
+
+----------------------------------------------------
+  NAVIGAZIONE NELL'INTERFACCIA (TUI)
+----------------------------------------------------
+
+  Frecce su/giù   — sposta la selezione nel menu
+  Invio           — conferma / apre l'azione selezionata
+  H oppure F1     — apre la schermata di aiuto
+  Esc oppure Q    — annulla / torna indietro / esci
+  Ctrl+C          — interrompe un'operazione in corso
+
+
+----------------------------------------------------
+  COMANDI DIRETTI (senza interfaccia grafica)
+----------------------------------------------------
+
+OCR di un PDF (output: PDF ricercabile):
+
+  pydf-tool ocr "documento.pdf" --lang it
+
+OCR con output in testo semplice:
+
+  pydf-tool ocr "documento.pdf" --lang it --output "testo.txt"
+
+OCR con più lingue:
+
+  pydf-tool ocr "documento.pdf" --lang it+en
+
+Compressione con preset:
+
+  pydf-tool compress "documento.pdf" --level low
+  pydf-tool compress "documento.pdf" --level medium
+  pydf-tool compress "documento.pdf" --level high
+
+Compressione con livello personalizzato (1-100):
+
+  pydf-tool compress "documento.pdf" --level 65
+
+Compressione con conversione in bianco e nero:
+
+  pydf-tool compress "documento.pdf" --level medium --grayscale
+
+Specificare dove salvare l'output:
+
+  pydf-tool ocr "documento.pdf" --lang it --output "/tmp/risultato.pdf"
+  pydf-tool compress "documento.pdf" --level high --output "/tmp/compresso.pdf"
+
+Se non specifichi --output, il file viene salvato nella stessa
+cartella dell'originale con un nome tipo "documento.1.pdf".
+
+Aiuto generale:
+
+  pydf-tool --help
+  pydf-tool help ocr
+  pydf-tool help compress
+
+
+----------------------------------------------------
+  LINGUE OCR DISPONIBILI
+----------------------------------------------------
+
+  it      Italiano
+  en      Inglese
+  it+en   Italiano + Inglese insieme
+
+
+----------------------------------------------------
+  LIVELLI DI COMPRESSIONE
+----------------------------------------------------
+
+  low     — compressione leggera, qualità alta
+  medium  — bilanciato (scelta consigliata)
+  high    — compressione aggressiva, file più piccolo
+  1-100   — controllo manuale (100 = massima compressione)
+
+Nota: su PDF già ottimizzati la compressione può produrre
+un file più grande dell'originale. È normale.
+
+
+----------------------------------------------------
+  INSERIRE I PERCORSI DEI FILE NELLA TUI
+----------------------------------------------------
+
+IMPORTANTE: nella TUI devi sempre scrivere il percorso
+COMPLETO del file PDF, non solo il nome.
+
+  SBAGLIATO: documento.pdf
+  GIUSTO:    /Users/flosh/Desktop/documento.pdf
+  GIUSTO:    ~/Desktop/documento.pdf
+
+Per trovare il percorso completo su macOS:
+  1. Trova il file in Finder
+  2. Tasto destro → "Ottieni informazioni"
+     oppure seleziona il file e premi Cmd+I
+  3. Copia il percorso mostrato in "Dove:"
+
+Oppure trascina il file sul terminale (fuori dalla TUI)
+prima di avviare pydf-tool: il percorso apparirà nel
+terminale e potrai copiarlo.
+
+
+----------------------------------------------------
+  DOPO OGNI MODIFICA AL CODICE
+----------------------------------------------------
+
+Dato che il progetto usa l'installazione "editable",
+le modifiche al codice in src/ sono IMMEDIATE — non
+serve reinstallare niente.
+
+Passi dopo una modifica:
+
+  1. Esci dalla TUI se è aperta (Esc o Ctrl+C)
+  2. Rilancia il tool:
+
+       pydf-tool
+
+  La modifica è già attiva.
+
+Se invece sono cambiate le DIPENDENZE (pyproject.toml):
+
+  pip install -e .
+
+Se la venv è da rifare da zero (es. dopo aggiornamento
+di Python, o errore "No module named"):
+
+  cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+  rm -rf .venv && bash setup.sh
+  source .venv/bin/activate
+
+
+----------------------------------------------------
+  SETUP (prima installazione o dopo aggiornamenti)
+----------------------------------------------------
+
+Se è la prima volta, o se hai aggiornato Python e il tool
+non si avvia più, esegui questi comandi nell'ordine:
+
+  cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+  rm -rf .venv
+  bash setup.sh
+  source .venv/bin/activate
+
+Poi verifica che funzioni:
+
+  pydf-tool --help
+
+
+----------------------------------------------------
+  PROBLEMI COMUNI
+----------------------------------------------------
+
+"No module named 'pdf_tool'" o errore all'avvio
+  → Il wrapper pydf-tool non è aggiornato.
+    Esegui:
+      cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+      rm -rf .venv && bash setup.sh && source .venv/bin/activate
+
+"Dipendenze TUI mancanti"
+  → L'ambiente virtuale non è attivo. Esegui:
+    source .venv/bin/activate
+
+"Tesseract non trovato"
+  → Installa con: brew install tesseract tesseract-lang
+
+"Ghostscript non trovato"
+  → Installa con: brew install ghostscript
+
+L'OCR sembra bloccato senza fare niente
+  → Non è bloccato. L'OCR è lento per natura, specialmente
+    su PDF grandi. Aspetta. Nella TUI vedi l'avanzamento
+    pagina per pagina.
+
+Il file compresso è più grande dell'originale
+  → È normale su PDF già ottimizzati. Prova un livello
+    più alto (es. high o un numero vicino a 100).
+
+
+----------------------------------------------------
+  NOTE
+----------------------------------------------------
+
+- Il tool funziona solo con la venv attiva.
+  Devi eseguire "source .venv/bin/activate" ogni volta
+  che apri un nuovo terminale.
+
+- Questo tool è pensato per macOS. Non è testato su
+  altri sistemi operativi.
+
+- L'OCR funziona bene su documenti scansionati in modo
+  leggibile. Su PDF con testo storto, sbiadito o molto
+  piccolo i risultati possono variare.
+
+====================================================

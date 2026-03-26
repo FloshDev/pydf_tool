@@ -143,11 +143,147 @@ def run_ocr(
         )
 
     use_pdftocairo = shutil.which("pdftocairo") is not None
+
+    # Se page_count è noto, processiamo pagina per pagina (low-memory).
+    # Ogni pagina viene caricata, processata e liberata prima di passare alla successiva.
+    # Picco RAM: ~26 MB/pagina a 300 DPI (vs N*26 MB con caricamento batch).
+    # Se page_count è None (PdfReader ha fallito), si ricade nel percorso batch originale.
+
+    if page_count is not None:
+        _emit_progress(
+            progress_callback,
+            stage="ocr",
+            message=f"OCR pronto: 0/{page_count} pagine",
+            completed=0,
+            total=page_count,
+        )
+
+        if destination.suffix.lower() == ".txt":
+            page_texts: list[str] = []
+            for page_num in range(1, page_count + 1):
+                try:
+                    page_imgs = convert_from_path(
+                        str(source),
+                        dpi=300,
+                        use_pdftocairo=use_pdftocairo,
+                        first_page=page_num,
+                        last_page=page_num,
+                    )
+                except Exception as exc:
+                    raise PDFToolError(
+                        f"Rendering pagina {page_num} fallito. "
+                        "Verifica che Poppler sia installato e il PDF valido."
+                    ) from exc
+                if not page_imgs:
+                    raise PDFToolError(f"Nessuna immagine prodotta per la pagina {page_num}.")
+                image = page_imgs[0]
+                del page_imgs
+                try:
+                    text = pytesseract.image_to_string(image, lang=tesseract_lang).strip()
+                except Exception as exc:
+                    raise PDFToolError(
+                        f"OCR fallito sulla pagina {page_num}. "
+                        "Verifica lingua OCR e installazione di Tesseract."
+                    ) from exc
+                finally:
+                    del image
+                page_header = f"--- Pagina {page_num} ---"
+                page_texts.append(page_header if not text else f"{page_header}\n{text}")
+                _emit_progress(
+                    progress_callback,
+                    stage="ocr",
+                    message=f"OCR pagina {page_num}/{page_count}",
+                    completed=page_num,
+                    total=page_count,
+                )
+
+            _emit_progress(
+                progress_callback,
+                stage="finalize",
+                message="Scrittura output testuale",
+                completed=page_count,
+                total=page_count,
+            )
+            destination.write_text("\n\n".join(page_texts) + "\n", encoding="utf-8")
+            _emit_progress(
+                progress_callback,
+                stage="done",
+                message="OCR completato",
+                completed=page_count,
+                total=page_count,
+            )
+            return OCRResult(output_path=destination, pages=page_count, output_type="txt")
+
+        writer = PdfWriter()
+        for page_num in range(1, page_count + 1):
+            try:
+                page_imgs = convert_from_path(
+                    str(source),
+                    dpi=300,
+                    use_pdftocairo=use_pdftocairo,
+                    first_page=page_num,
+                    last_page=page_num,
+                )
+            except Exception as exc:
+                raise PDFToolError(
+                    f"Rendering pagina {page_num} fallito. "
+                    "Verifica che Poppler sia installato e il PDF valido."
+                ) from exc
+            if not page_imgs:
+                raise PDFToolError(f"Nessuna immagine prodotta per la pagina {page_num}.")
+            image = page_imgs[0]
+            del page_imgs
+            try:
+                searchable_page = pytesseract.image_to_pdf_or_hocr(
+                    image,
+                    extension="pdf",
+                    lang=tesseract_lang,
+                )
+                page_reader = PdfReader(BytesIO(searchable_page))
+                writer.add_page(page_reader.pages[0])
+            except Exception as exc:
+                raise PDFToolError(
+                    f"Generazione del PDF OCR fallita sulla pagina {page_num}. "
+                    "Verifica il PDF di input e l'installazione OCR."
+                ) from exc
+            finally:
+                del image
+            _emit_progress(
+                progress_callback,
+                stage="ocr",
+                message=f"OCR pagina {page_num}/{page_count}",
+                completed=page_num,
+                total=page_count,
+            )
+
+        _emit_progress(
+            progress_callback,
+            stage="finalize",
+            message="Scrittura PDF ricercabile",
+            completed=page_count,
+            total=page_count,
+        )
+        try:
+            with destination.open("wb") as file_obj:
+                writer.write(file_obj)
+        except Exception as exc:
+            raise PDFToolError(f"Scrittura del file OCR fallita: {destination}") from exc
+
+        _emit_progress(
+            progress_callback,
+            stage="done",
+            message="OCR completato",
+            completed=page_count,
+            total=page_count,
+        )
+        return OCRResult(output_path=destination, pages=page_count, output_type="pdf")
+
+    # Percorso batch (fallback): page_count sconosciuto, carica tutto in memoria.
     _emit_progress(
         progress_callback,
         stage="render",
         message="Rendering pagine con Poppler",
-        total=page_count,
+        total=None,
     )
     try:
         images = convert_from_path(str(source), dpi=300, use_pdftocairo=use_pdftocairo)
@@ -170,7 +306,7 @@ def run_ocr(
     )
 
     if destination.suffix.lower() == ".txt":
-        page_texts: list[str] = []
+        page_texts_batch: list[str] = []
         for index, image in enumerate(images, start=1):
             try:
                 text = pytesseract.image_to_string(image, lang=tesseract_lang).strip()
@@ -180,7 +316,7 @@ def run_ocr(
                     "Verifica lingua OCR e installazione di Tesseract."
                 ) from exc
             page_header = f"--- Pagina {index} ---"
-            page_texts.append(page_header if not text else f"{page_header}\n{text}")
+            page_texts_batch.append(page_header if not text else f"{page_header}\n{text}")
             _emit_progress(
                 progress_callback,
                 stage="ocr",
@@ -189,6 +325,7 @@ def run_ocr(
                 total=page_count,
             )
 
+        del images
         _emit_progress(
             progress_callback,
             stage="finalize",
@@ -196,8 +333,15 @@ def run_ocr(
             completed=page_count,
             total=page_count,
         )
-        destination.write_text("\n\n".join(page_texts) + "\n", encoding="utf-8")
-        return OCRResult(output_path=destination, pages=len(images), output_type="txt")
+        destination.write_text("\n\n".join(page_texts_batch) + "\n", encoding="utf-8")
+        _emit_progress(
+            progress_callback,
+            stage="done",
+            message="OCR completato",
+            completed=page_count,
+            total=page_count,
+        )
+        return OCRResult(output_path=destination, pages=page_count, output_type="txt")
 
     writer = PdfWriter()
     for index, image in enumerate(images, start=1):
@@ -222,6 +366,7 @@ def run_ocr(
             total=page_count,
         )
 
+    del images
     _emit_progress(
         progress_callback,
         stage="finalize",
@@ -242,5 +387,4 @@ def run_ocr(
         completed=page_count,
         total=page_count,
     )
-
-    return OCRResult(output_path=destination, pages=len(images), output_type="pdf")
+    return OCRResult(output_path=destination, pages=page_count, output_type="pdf")

@@ -20,8 +20,9 @@ Modalita disponibili:
 
 Funzioni supportate oggi:
 
-- `ocr`
-- `compress`
+- `check` — verifica se un PDF ha già testo ricercabile
+- `ocr` — OCR di PDF scansionati
+- `compress` — compressione PDF
 
 ## Prerequisiti
 
@@ -81,6 +82,12 @@ Nella TUI:
 ### CLI diretta
 
 Usa i sottocomandi quando vuoi eseguire un'operazione precisa senza passare dalla TUI.
+
+Verifica OCR:
+
+```bash
+pydf-tool check documento.pdf
+```
 
 OCR:
 

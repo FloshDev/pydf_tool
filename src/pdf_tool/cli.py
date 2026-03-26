@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .check_ocr import check_ocr
 from .compress import compress_pdf
 from .errors import PDFToolError
 from .ocr import run_ocr
@@ -64,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compress_parser.set_defaults(handler=_handle_compress)
 
+    check_parser = subparsers.add_parser(
+        "check",
+        help="Verifica se un PDF contiene già testo ricercabile o necessita di OCR.",
+    )
+    check_parser.add_argument("input", help="PDF da analizzare.")
+    check_parser.set_defaults(handler=_handle_check)
+
     interactive_parser = subparsers.add_parser(
         "interactive",
         help="Apre la TUI interattiva di PyDF Tool.",
@@ -77,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
     help_parser.add_argument(
         "topic",
         nargs="?",
-        choices=("ocr", "compress", "interactive"),
+        choices=("ocr", "compress", "check", "interactive"),
         help="Comando di cui mostrare l'aiuto.",
     )
     help_parser.set_defaults(handler=lambda args, parser=parser: _handle_help(args, parser))
@@ -117,6 +125,26 @@ def _handle_compress(args: argparse.Namespace) -> int:
             "Nota: il file risultante e piu grande dell'originale. "
             "Prova un livello di compressione piu alto."
         )
+    return 0
+
+
+def _handle_check(args: argparse.Namespace) -> int:
+    result = check_ocr(Path(args.input))
+    verdetti = {
+        "ocr_needed": "OCR necessario — il PDF non contiene testo ricercabile.",
+        "already_searchable": "PDF già ricercabile — OCR non necessario.",
+        "mixed": (
+            f"PDF misto — {result.pages_with_text} pagine con testo, "
+            f"{result.pages_without_text} senza."
+        ),
+    }
+    print(f"File: {args.input}")
+    print(f"Pagine totali: {result.pages_total}")
+    print(f"Pagine con testo: {result.pages_with_text}")
+    print(f"Pagine senza testo: {result.pages_without_text}")
+    print(f"Media caratteri/pagina: {result.chars_per_page_avg:.0f}")
+    print()
+    print(f"Verdetto: {verdetti[result.verdict]}")
     return 0
 
 
