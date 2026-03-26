@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydf-tool"
+version = "0.1.0"
+description = "PyDF Tool: OCR e compressione PDF per macOS"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pdf2image==1.17.0",
+    "prompt_toolkit==3.0.42",
+    "pypdf==6.8.0",
+    "pytesseract==0.3.13",
+    "rich==13.7.1",
+    "Pillow==12.1.1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+script-files = ["scripts/pydf-tool"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
