@@ -26,9 +26,9 @@ Leggere questo file è sufficiente per riprendere il lavoro senza rileggere il c
 ├── PROJECT_CONTEXT.md     # questo file
 ├── .gitignore
 ├── src/
-│   └── pdf_tool/
+│   └── pydf_tool/
 │       ├── __init__.py
-│       ├── __main__.py    # entry point per `python -m pdf_tool`
+│       ├── __main__.py    # entry point per `python -m pydf_tool`
 │       ├── cli.py         # argparse, routing CLI/TUI, error boundary
 │       ├── tui.py         # TUI full-screen, dialog, progress
 │       ├── ocr.py         # pipeline OCR (pdf2image + pytesseract + pypdf)
@@ -37,7 +37,7 @@ Leggere questo file è sufficiente per riprendere il lavoro senza rileggere il c
 │       ├── utils.py       # path helpers, Unicode normalization, size format
 │       └── errors.py      # PDFToolError
 └── tests/
-    └── test_cli.py        # 30 test unittest
+    └── test_cli.py        # 35 test unittest
 ```
 
 ---
@@ -84,7 +84,7 @@ nello script prima dell'import. Va rieseguito dopo ogni `pip install -e .` manua
 Il `site.py` del Python.org Python 3.12 salta tutti i `.pth` file marcati con il flag
 filesystem macOS `UF_HIDDEN`. Il comando `python3 -m venv .venv` imposta `UF_HIDDEN`
 sull'intera cartella `.venv` — tutti i `.pth` installati da pip vengono saltati →
-`ModuleNotFoundError: No module named 'pdf_tool'`.
+`ModuleNotFoundError: No module named 'pydf_tool'`.
 
 Approcci precedenti tentati:
 - `chflags -R nohidden .venv` → parziale: pip ricreava i file con UF_HIDDEN
@@ -180,6 +180,41 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 - Normalizzazione path Unicode (NFC/NFD): coperta da test e verificata
 - Staging Ghostscript per path Unicode: coperto da test e verificato
 - Suite 35 test: verde
+- Modulo rinominato `pydf_tool` (era `pdf_tool`) — entry point, test, wrapper, docs aggiornati
+- TUI: layout box-drawing Unicode con palette CLAUDE.md, sfondo trasparente
+
+### Fix applicati (2026-03-28) — Sessione 1.0
+
+**Rinomina semantica modulo `pdf_tool` → `pydf_tool`:**
+- Directory `src/pdf_tool/` rinominata in `src/pydf_tool/`
+- `pyproject.toml`: entry point aggiornato a `pydf_tool.cli:main`
+- `tests/test_cli.py`: tutti gli import e le stringhe `patch(...)` aggiornati
+- `setup.sh`: import nel wrapper patchato + commenti aggiornati
+- `ISTRUZIONI.txt`: messaggio di errore "No module named" aggiornato
+- `PROJECT_CONTEXT.md`: tutti i path e riferimenti al modulo aggiornati
+
+**TUI — applicazione design system (CLAUDE.md globale):**
+- Palette colori: `#E8B84B` accento, `#D4D4D4` testo, `#7A7A7A` secondario, `#3A3A3A` bordi, `#E85B4B` errore, `#4BE87A` successo
+- `_dialog_style()`: tutti i colori allineati alla palette
+- Home menu style: accento su brand, voce selezionata, titoli sezioni
+- Output Rich: progress bar `#E8B84B`, errori `#E85B4B`, successo `#4BE87A`, annullato `#3A3A3A`
+- Sfondo trasparente: rimossi tutti i `bg:#` espliciti; cursore text-area usa `reverse` nativo
+
+**TUI — redesign strutturale layout (box-drawing Unicode):**
+- Header: box completo `┌─ PyDF Tool ─┐` con tagline e summary dentro
+- Menu: box `┌─ Azioni ─┐` con items; item selezionato in `#E8B84B bold`
+- Detail: box `┌─ Anteprima ─┐` con heading, testo, comando
+- Separatore header→body: riga vuota; separatore body→footer: `─` pieno
+- Rimosso divider `│` tra menu e detail; sostituito con spaziatore `Window(width=2)`
+- Helper interni: `_box_top`, `_box_bottom`, `_box_line`, `_box_blank`
+
+### Fix applicati (2026-03-28) — Sessione precedente
+
+**TUI — crash e chiusure improvvise: 4 fix:**
+- **`_pause()` EOFError**: aggiunto `try/except EOFError: pass` — evita crash quando stdin è in stato strano dopo prompt_toolkit full-screen
+- **Issue #2 risolto — monkey-patch RadioList eliminato**: sostituito con `@kb.add("enter", eager=True)` che legge `radio_list.values[radio_list._selected_index][0]` e chiama `event.app.exit()` — nessun monkey-patch, nessun `try/except Exception: pass` silente
+- **`_run_interactive_shell_safe()` cattura EOFError**: aggiunto `EOFError` a fianco di `KeyboardInterrupt` nel boundary top-level
+- **Issue #4 risolto — validazione path early**: `_prompt_ocr_args()`, `_prompt_compress_args()`, `_prompt_check_args()` ora chiamano `ensure_pdf_input()` subito dopo `_ask_text()` — se il path è invalido mostra `_show_info_dialog()` e ritorna `None` immediatamente, prima di aprire ulteriori dialog
 
 ### Modifiche applicate (2026-03-27)
 
@@ -224,12 +259,8 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 - `convert_from_path()` ora chiamata per singola pagina con `first_page=N, last_page=N`
 - Fallback batch per i casi in cui PdfReader non riesce a leggere il page count
 
-**Issue #2 — TUI: monkey-patch `_handle_enter` su RadioList**
-- File: `tui.py:606-615`
-- Sovrascrive metodo privato di `prompt_toolkit.RadioList`
-- `try/except Exception: pass` inghiotte errori silenziosamente
-- Fragile a aggiornamenti di `prompt_toolkit`
-- Fix: keybinding esplicito `Enter` che legge `radio_list.current_value` e chiama `get_app().exit()`
+**~~Issue #2 — TUI: monkey-patch `_handle_enter` su RadioList~~** — RISOLTO (2026-03-28)
+- Sostituito con `@kb.add("enter", eager=True)` + `radio_list.values[radio_list._selected_index][0]`
 
 **Issue #3 — TUI: alternanza prompt_toolkit / rich**
 - File: `tui.py:997-1037`
@@ -237,11 +268,8 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 - Strutturalmente fragile su terminali non-standard
 - Mitigazione a lungo termine: unificare su un solo framework
 
-**Issue #4 — Validazione path input troppo tardiva nel wizard TUI**
-- File: `tui.py:701-703`
-- Il path viene validato solo quando `run_ocr` / `compress_pdf` partono
-- L'utente scopre l'errore dopo aver completato tutti i dialog
-- Fix: chiamare `ensure_pdf_input()` subito dopo `_ask_text()` nel wizard
+**~~Issue #4 — Validazione path input troppo tardiva nel wizard TUI~~** — RISOLTO (2026-03-28)
+- `ensure_pdf_input()` ora chiamata in tutti e tre i wizard subito dopo `_ask_text()`; errore mostrato con `_show_info_dialog()` prima di aprire dialog successivi
 
 ### Priorità 3 (architetturali)
 
@@ -271,9 +299,9 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 |---|---|---|---|
 | 1 | ~~**Feature: Check OCR**~~ — `pydf-tool check input.pdf` | Feature | FATTO |
 | 2 | ~~**Issue #5** — Migrazione a `console_scripts`~~ | Arch | FATTO |
-| 3 | **Issue #4** — Validazione path early nel wizard | Fix | Media |
+| 3 | ~~**Issue #4** — Validazione path early nel wizard~~ | Fix | FATTO |
 | 4 | ~~**Issue #1** — OCR page-by-page (memoria)~~ | Fix | FATTO |
-| 5 | **Issue #2** — Fix monkey-patch RadioList | Fix | Media |
+| 5 | ~~**Issue #2** — Fix monkey-patch RadioList~~ | Fix | FATTO |
 | 6 | Colmare gap test (OCR .pdf, compress TUI, utils) | Test | Media |
 | 7 | **Issue #6** — OCR in thread worker | Arch | Bassa |
 | 8 | **Issue #3** — Unificare framework TUI | Arch | Bassa |
@@ -282,7 +310,7 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 
 ## Feature: Check OCR — spec
 
-Funzione da implementare in `src/pdf_tool/check_ocr.py`:
+Funzione da implementare in `src/pydf_tool/check_ocr.py`:
 
 ```
 check_ocr(path) -> CheckOCRResult
@@ -303,9 +331,9 @@ Superficie TUI da aggiungere:
 - Pannello risultato con verdict + offerta di procedere con OCR se `ocr_needed` o `mixed`
 
 Tocca:
-- `src/pdf_tool/check_ocr.py` (nuovo)
-- `src/pdf_tool/cli.py` (nuovo subparser `check`)
-- `src/pdf_tool/tui.py` (nuova voce `_home_actions`, nuovo dialog, nuovo branch in `run_interactive_app`)
+- `src/pydf_tool/check_ocr.py` (nuovo)
+- `src/pydf_tool/cli.py` (nuovo subparser `check`)
+- `src/pydf_tool/tui.py` (nuova voce `_home_actions`, nuovo dialog, nuovo branch in `run_interactive_app`)
 - `tests/test_cli.py` (nuovi test)
 - `README.md` (nuovo esempio)
 

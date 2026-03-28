@@ -204,7 +204,7 @@ def _run_interactive_shell_safe() -> int:
     except PDFToolError as exc:
         print(f"Errore: {exc}", file=sys.stderr)
         return 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         print("Operazione interrotta.", file=sys.stderr)
         return 130
 

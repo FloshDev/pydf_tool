@@ -13,7 +13,7 @@ from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
 from .ocr import OCRResult, run_ocr
 from .progress import OperationProgress
-from .utils import format_size_change, resolve_incremental_output_path, resolve_user_path
+from .utils import ensure_pdf_input, format_size_change, resolve_incremental_output_path, resolve_user_path
 
 EXIT_COMMANDS = {"exit", "quit", ":q"}
 APP_NAME = "PyDF Tool"
@@ -106,25 +106,25 @@ def _dialog_style():
     Style = _load_prompt_toolkit()["Style"]
     return Style.from_dict(
         {
-            "selected": "bg:#f5f5f5 fg:#1e1e1e",
-            "dialog": "bg:#1e1e1e fg:#d4d4d4",
-            "frame.border": "fg:#8a8a8a",
-            "dialog frame.label": "fg:#e5e5e5 bold",
-            "dialog.body": "bg:#1e1e1e fg:#d4d4d4",
-            "dialog.body label": "bg:#1e1e1e fg:#f0f0f0",
-            "dialog.body text-area": "bg:#2a2a2a fg:#f5f5f5",
-            "dialog.body text-area.prompt": "bg:#2a2a2a fg:#a5a5a5",
-            "dialog.body text-area cursor": "bg:#f5f5f5 fg:#1e1e1e",
+            "selected": "fg:#E8B84B bold",
+            "dialog": "fg:#D4D4D4",
+            "frame.border": "fg:#3A3A3A",
+            "dialog frame.label": "fg:#E8B84B bold",
+            "dialog.body": "fg:#D4D4D4",
+            "dialog.body label": "fg:#D4D4D4",
+            "dialog.body text-area": "fg:#D4D4D4",
+            "dialog.body text-area.prompt": "fg:#7A7A7A",
+            "dialog.body text-area cursor": "reverse",
             "dialog.body text-area last-line": "nounderline",
-            "dialog_hint": "bg:#1e1e1e fg:#9f9f9f",
-            "validation-toolbar": "bg:#3a3a3a fg:#f5f5f5",
-            "dialog shadow": "bg:#1e1e1e",
-            "button": "bg:#1e1e1e fg:#9f9f9f",
-            "button.arrow": "fg:#9f9f9f",
-            "button.focused": "bg:#2a2a2a fg:#ffffff bold",
-            "button.focused.arrow": "fg:#ffffff bold",
-            "radio": "fg:#9f9f9f",
-            "radio-selected": "fg:#ffffff bold",
+            "dialog_hint": "fg:#7A7A7A",
+            "validation-toolbar": "fg:#D4D4D4",
+            "dialog shadow": "",
+            "button": "fg:#7A7A7A",
+            "button.arrow": "fg:#7A7A7A",
+            "button.focused": "fg:#E8B84B bold",
+            "button.focused.arrow": "fg:#E8B84B bold",
+            "radio": "fg:#7A7A7A",
+            "radio-selected": "fg:#E8B84B bold",
         }
     )
 
@@ -291,7 +291,6 @@ def _show_home_menu() -> str | None:
 
     def _header_state() -> tuple[str, list[str]]:
         columns, _ = _screen_metrics()
-
         line_width = max(20, columns - 2)
         tagline_width = max(0, line_width - len(APP_NAME) - 2)
         tagline = ""
@@ -300,24 +299,6 @@ def _show_home_menu() -> str | None:
         summary_lines = _wrap_lines(APP_SUMMARY, line_width, 2)
         return tagline, summary_lines
 
-    def _header_fragments():
-        tagline, summary_lines = _header_state()
-        fragments: list[tuple[str, str]] = [("class:app_brand", APP_NAME)]
-        if tagline:
-            fragments.append(("class:app_tagline", f"  {tagline}"))
-        for line in summary_lines:
-            fragments.append(("", "\n"))
-            fragments.append(("class:app_header", line))
-        return fragments
-
-    def _header_window():
-        _, summary_lines = _header_state()
-        return Window(
-            height=1 + len(summary_lines),
-            content=FormattedTextControl(_header_fragments),
-            always_hide_cursor=True,
-        )
-
     def _layout_metrics() -> tuple[bool, int, int, int, bool, bool]:
         columns, rows = _screen_metrics()
         compact = rows < 26
@@ -325,57 +306,112 @@ def _show_home_menu() -> str | None:
 
         if columns >= 110 and show_detail:
             menu_width = min(40, max(32, columns // 3))
-            detail_width = max(28, columns - menu_width - 6)
+            detail_width = max(28, columns - menu_width - 2)
             return True, menu_width, detail_width, rows, compact, show_detail
 
         stacked_width = max(28, columns - 4)
         return False, stacked_width, stacked_width, rows, compact, show_detail
 
+    # ── box helpers ──────────────────────────────────────────────────────────
+
+    def _box_top(box_width: int, title: str, title_style: str) -> list[tuple[str, str]]:
+        fill = max(1, box_width - len(title) - 5)
+        return [
+            ("class:app_border", "┌─ "),
+            (title_style, title),
+            ("class:app_border", " " + "─" * fill + "┐\n"),
+        ]
+
+    def _box_bottom(box_width: int) -> list[tuple[str, str]]:
+        return [("class:app_border", "└" + "─" * (box_width - 2) + "┘\n")]
+
+    def _box_line(box_width: int, content: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return [("class:app_border", "│ ")] + content + [("class:app_border", " │\n")]
+
+    def _box_blank(box_width: int) -> list[tuple[str, str]]:
+        return [("class:app_border", "│ " + " " * (box_width - 4) + " │\n")]
+
+    # ── header ───────────────────────────────────────────────────────────────
+
+    def _header_fragments():
+        columns, _ = _screen_metrics()
+        box_w = max(20, columns - 2)
+        inner_w = box_w - 4
+        tagline, summary_lines = _header_state()
+        frags: list[tuple[str, str]] = []
+        frags += _box_top(box_w, APP_NAME, "class:app_brand")
+        if tagline:
+            frags += _box_line(box_w, [("class:app_tagline", tagline.ljust(inner_w)[:inner_w])])
+        for line in summary_lines:
+            frags += _box_line(box_w, [("class:app_header", line.ljust(inner_w)[:inner_w])])
+        frags += _box_bottom(box_w)
+        return frags
+
+    def _header_window():
+        tagline, summary_lines = _header_state()
+        height = 2 + (1 if tagline else 0) + len(summary_lines)
+        return Window(
+            height=height,
+            content=FormattedTextControl(_header_fragments),
+            always_hide_cursor=True,
+        )
+
+    # ── menu ─────────────────────────────────────────────────────────────────
+
     def _menu_fragments():
         _, menu_width, _, _, compact, _ = _layout_metrics()
-        text_width = max(18, menu_width - 4)
-        section_gap = "\n" if compact else "\n\n"
-        item_gap = "\n" if compact else "\n\n"
-        fragments: list[tuple[str, str]] = [("class:home_section", "Azioni" + section_gap)]
+        inner_w = max(4, menu_width - 4)
+        item_gap = not compact
+        frags: list[tuple[str, str]] = []
+        frags += _box_top(menu_width, "Azioni", "class:home_section")
         for index, action in enumerate(actions):
             selected = index == state["index"]
-            marker_style = "class:home_marker_active" if selected else "class:home_marker"
+            marker = "> " if selected else "  "
             title_style = "class:home_title_active" if selected else "class:home_title"
-            summary_style = (
-                "class:home_summary_active" if selected else "class:home_summary"
-            )
-            indicator = "> " if selected else "  "
-            fragments.append((marker_style, indicator))
-            fragments.append((title_style, _fit_line(action.title, text_width) + "\n"))
-            fragments.append(
-                (summary_style, "  " + _fit_line(action.summary, text_width) + item_gap)
-            )
-        return fragments
+            summary_style = "class:home_summary_active" if selected else "class:home_summary"
+            marker_style = "class:home_marker_active" if selected else "class:home_marker"
+            frags += _box_line(menu_width, [
+                (marker_style, marker),
+                (title_style, _fit_line(action.title, inner_w - 2)),
+            ])
+            frags += _box_line(menu_width, [
+                (summary_style, "  " + _fit_line(action.summary, inner_w - 2)),
+            ])
+            if item_gap and index < len(actions) - 1:
+                frags += _box_blank(menu_width)
+        frags += _box_bottom(menu_width)
+        return frags
+
+    # ── detail ────────────────────────────────────────────────────────────────
 
     def _detail_fragments():
         action = actions[state["index"]]
         _, _, detail_width, _, compact, _ = _layout_metrics()
-        detail_lines = 2 if compact else 3
-        command_lines = 1 if compact else 2
-        fragments: list[tuple[str, str]] = [("class:detail_section", "Anteprima\n\n")]
-        for line in _wrap_lines(action.title, detail_width, 1):
-            fragments.append(("class:detail_heading", line + "\n"))
-        fragments.append(("class:detail_text", "\n"))
-        for line in _wrap_lines(action.detail, detail_width, detail_lines):
-            fragments.append(("class:detail_text", line + "\n"))
-        fragments.append(("class:detail_text", "\n"))
-        fragments.append(("class:detail_label", "Comando\n"))
-        for line in _wrap_lines(action.example, detail_width, command_lines):
-            fragments.append(("class:detail_code", line + "\n"))
-        return fragments
+        detail_lines_n = 2 if compact else 3
+        command_lines_n = 1 if compact else 2
+        inner_w = max(4, detail_width - 4)
+        frags: list[tuple[str, str]] = []
+        frags += _box_top(detail_width, "Anteprima", "class:detail_section")
+        frags += _box_blank(detail_width)
+        for line in _wrap_lines(action.title, inner_w, 1):
+            frags += _box_line(detail_width, [("class:detail_heading", line.ljust(inner_w)[:inner_w])])
+        frags += _box_blank(detail_width)
+        for line in _wrap_lines(action.detail, inner_w, detail_lines_n):
+            frags += _box_line(detail_width, [("class:detail_text", line.ljust(inner_w)[:inner_w])])
+        frags += _box_blank(detail_width)
+        frags += _box_line(detail_width, [("class:detail_label", "Comando".ljust(inner_w)[:inner_w])])
+        for line in _wrap_lines(action.example, inner_w, command_lines_n):
+            frags += _box_line(detail_width, [("class:detail_code", line.ljust(inner_w)[:inner_w])])
+        frags += _box_blank(detail_width)
+        frags += _box_bottom(detail_width)
+        return frags
+
+    # ── footer ────────────────────────────────────────────────────────────────
 
     def _footer_fragments():
-        return [
-            (
-                "class:app_footer",
-                "↑↓ naviga  Invio apre  H help  Q/Esc esce",
-            )
-        ]
+        return [("class:app_footer", "↑↓ naviga  Invio apre  H help  Q/Esc esce")]
+
+    # ── key bindings ─────────────────────────────────────────────────────────
 
     kb = KeyBindings()
 
@@ -401,13 +437,17 @@ def _show_home_menu() -> str | None:
     def _help(event) -> None:
         event.app.exit(result="help")
 
+    # ── layout ───────────────────────────────────────────────────────────────
+
     def _home_body():
         wide, menu_width, _, _, _, show_detail = _layout_metrics()
+
         menu_window = Window(
             width=menu_width,
             content=FormattedTextControl(_menu_fragments),
             always_hide_cursor=True,
         )
+
         if not show_detail:
             return menu_window
 
@@ -417,27 +457,15 @@ def _show_home_menu() -> str | None:
         )
 
         if wide:
-            return VSplit(
-                [
-                    menu_window,
-                    Window(width=1, char="│", style="class:app_divider"),
-                    detail_window,
-                ]
-            )
+            return VSplit([menu_window, Window(width=2), detail_window])
 
-        return HSplit(
-            [
-                menu_window,
-                Window(height=1, char="─", style="class:app_divider"),
-                detail_window,
-            ]
-        )
+        return HSplit([menu_window, Window(height=1), detail_window])
 
     layout = Layout(
         HSplit(
             [
                 DynamicContainer(_header_window),
-                Window(height=1, char="─", style="class:app_divider"),
+                Window(height=1),
                 DynamicContainer(_home_body),
                 Window(height=1, char="─", style="class:app_divider"),
                 Window(
@@ -451,24 +479,25 @@ def _show_home_menu() -> str | None:
 
     style = Style.from_dict(
         {
-            "": "bg:#1e1e1e fg:#d4d4d4",
-            "app_brand": "fg:#f0f0f0 bold",
-            "app_tagline": "fg:#8a8a8a",
-            "app_header": "fg:#9a9a9a",
-            "app_divider": "fg:#5f5f5f",
-            "home_section": "fg:#a8a8a8 bold",
-            "home_marker": "fg:#1e1e1e",
-            "home_marker_active": "fg:#f0f0f0 bold",
-            "home_title": "fg:#cfcfcf",
-            "home_title_active": "fg:#ffffff bold",
-            "home_summary": "fg:#777777",
-            "home_summary_active": "fg:#9a9a9a",
-            "detail_section": "fg:#a8a8a8 bold",
-            "detail_heading": "fg:#ffffff bold",
-            "detail_text": "fg:#cfcfcf",
-            "detail_label": "fg:#8a8a8a bold",
-            "detail_code": "fg:#d8d8d8",
-            "app_footer": "fg:#9a9a9a",
+            "": "fg:#D4D4D4",
+            "app_brand": "fg:#E8B84B bold",
+            "app_tagline": "fg:#7A7A7A",
+            "app_header": "fg:#7A7A7A",
+            "app_border": "fg:#3A3A3A",
+            "app_divider": "fg:#3A3A3A",
+            "home_section": "fg:#E8B84B",
+            "home_marker": "",
+            "home_marker_active": "fg:#E8B84B bold",
+            "home_title": "fg:#D4D4D4",
+            "home_title_active": "fg:#E8B84B bold",
+            "home_summary": "fg:#7A7A7A",
+            "home_summary_active": "fg:#7A7A7A",
+            "detail_section": "fg:#E8B84B",
+            "detail_heading": "fg:#E8B84B bold",
+            "detail_text": "fg:#D4D4D4",
+            "detail_label": "fg:#7A7A7A",
+            "detail_code": "fg:#D4D4D4",
+            "app_footer": "fg:#7A7A7A",
         }
     )
 
@@ -656,7 +685,6 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
     Application = toolkit["Application"]
     D = toolkit["D"]
     Dialog = toolkit["Dialog"]
-    get_app = toolkit["get_app"]
     HSplit = toolkit["HSplit"]
     KeyBindings = toolkit["KeyBindings"]
     Label = toolkit["Label"]
@@ -664,16 +692,6 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
     RadioList = toolkit["RadioList"]
 
     radio_list = RadioList(values=values)
-    original_handle_enter = radio_list._handle_enter
-
-    def _commit_selection() -> None:
-        original_handle_enter()
-        try:
-            get_app().exit(result=radio_list.current_value)
-        except Exception:
-            pass
-
-    radio_list._handle_enter = _commit_selection
     dialog_width = _dialog_width(72, minimum=44)
     dialog = Dialog(
         title=title,
@@ -693,6 +711,10 @@ def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | N
         width=D(preferred=dialog_width),
     )
     kb = KeyBindings()
+
+    @kb.add("enter", eager=True)
+    def _confirm(event) -> None:
+        event.app.exit(result=radio_list.values[radio_list._selected_index][0])
 
     @kb.add("escape")
     @kb.add("c-c")
@@ -765,6 +787,11 @@ def _prompt_ocr_args(input_path_default: str = "") -> argparse.Namespace | None:
     input_path = _clean_path_input(input_path)
     if not input_path:
         return None
+    try:
+        ensure_pdf_input(resolve_user_path(input_path))
+    except PDFToolError as exc:
+        _show_info_dialog("Esegui OCR", f"Percorso non valido:\n\n{exc}")
+        return None
 
     lang = _ask_choice(
         "Esegui OCR",
@@ -806,6 +833,11 @@ def _prompt_compress_args() -> argparse.Namespace | None:
         return None
     input_path = _clean_path_input(input_path)
     if not input_path:
+        return None
+    try:
+        ensure_pdf_input(resolve_user_path(input_path))
+    except PDFToolError as exc:
+        _show_info_dialog("Comprimi PDF", f"Percorso non valido:\n\n{exc}")
         return None
 
     level = _ask_choice(
@@ -858,6 +890,11 @@ def _prompt_check_args() -> argparse.Namespace | None:
         return None
     input_path = _clean_path_input(input_path)
     if not input_path:
+        return None
+    try:
+        ensure_pdf_input(resolve_user_path(input_path))
+    except PDFToolError as exc:
+        _show_info_dialog("Verifica OCR", f"Percorso non valido:\n\n{exc}")
         return None
     return argparse.Namespace(input=input_path)
 
@@ -928,7 +965,10 @@ def _prompt_manual_command() -> str | None:
 
 
 def _pause(message: str = "Premi Invio per tornare al menu") -> None:
-    _console().input(f"[bold]{message}.[/]")
+    try:
+        _console().input(f"[bold]{message}.[/]")
+    except EOFError:
+        pass
 
 
 def _show_error(message: str) -> None:
@@ -937,9 +977,9 @@ def _show_error(message: str) -> None:
     console = _console()
     console.print(
         Panel(
-            message,
-            title="[bold]Errore[/]",
-            border_style="white",
+            f"[#E85B4B]{message}[/]",
+            title="[bold #E85B4B]Errore[/]",
+            border_style="#E85B4B",
         )
     )
     _pause()
@@ -968,19 +1008,20 @@ def _run_with_progress(
             Text(
                 title + "\nPremi Ctrl+C per annullare l'operazione.",
                 justify="left",
+                style="#D4D4D4",
             ),
-            title=f"[bold]{APP_NAME}[/]",
-            border_style="white",
+            title=f"[bold #E8B84B]{APP_NAME}[/]",
+            border_style="#3A3A3A",
             padding=(0, 1),
         )
     )
 
     progress = Progress(
-        SpinnerColumn(style="white"),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None, complete_style="white", finished_style="white"),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
+        SpinnerColumn(style="#E8B84B"),
+        TextColumn("[progress.description]{task.description}", style="#D4D4D4"),
+        BarColumn(bar_width=None, complete_style="#E8B84B", finished_style="#E8B84B"),
+        TaskProgressColumn(style="#7A7A7A"),
+        TimeElapsedColumn(style="#7A7A7A"),
         console=console,
         expand=True,
     )
@@ -1000,9 +1041,9 @@ def _run_with_progress(
     except PDFToolError as exc:
         console.print(
             Panel(
-                str(exc),
-                title="[bold]Errore[/]",
-                border_style="white",
+                f"[#E85B4B]{exc}[/]",
+                title="[bold #E85B4B]Errore[/]",
+                border_style="#E85B4B",
             )
         )
         _pause()
@@ -1010,9 +1051,9 @@ def _run_with_progress(
     except KeyboardInterrupt:
         console.print(
             Panel(
-                "Operazione annullata dall'utente.",
-                title="[bold]Operazione annullata[/]",
-                border_style="white",
+                "[#7A7A7A]Operazione annullata dall'utente.[/]",
+                title="[#7A7A7A]Operazione annullata[/]",
+                border_style="#3A3A3A",
             )
         )
         _pause()
@@ -1044,8 +1085,8 @@ def _run_with_progress(
     console.print(
         Panel(
             table,
-            title=f"[bold]{success_title}[/]",
-            border_style="white",
+            title=f"[bold #4BE87A]{success_title}[/]",
+            border_style="#4BE87A",
         )
     )
     _pause()

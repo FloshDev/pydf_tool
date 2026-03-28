@@ -191,7 +191,7 @@ Poi verifica che funzioni:
   PROBLEMI COMUNI
 ----------------------------------------------------
 
-"No module named 'pdf_tool'" o errore all'avvio
+"No module named 'pydf_tool'" o errore all'avvio
   → Il wrapper pydf-tool non è aggiornato.
     Esegui:
       cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"

@@ -10,18 +10,18 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from pdf_tool.check_ocr import CheckOCRResult, check_ocr
-from pdf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
-from pdf_tool.compress import (
+from pydf_tool.check_ocr import CheckOCRResult, check_ocr
+from pydf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
+from pydf_tool.compress import (
     compress_pdf,
     resolve_compress_output_path,
     resolve_compression_profile,
 )
-from pdf_tool.errors import PDFToolError
-from pdf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
-from pdf_tool.ocr import run_ocr
-from pdf_tool.tui import _dialog_width, _wrap_dialog_text
-from pdf_tool.utils import ensure_pdf_input, resolve_user_path
+from pydf_tool.errors import PDFToolError
+from pydf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
+from pydf_tool.ocr import run_ocr
+from pydf_tool.tui import _dialog_width, _wrap_dialog_text
+from pydf_tool.utils import ensure_pdf_input, resolve_user_path
 
 
 class CheckOCRTestCase(unittest.TestCase):
@@ -110,7 +110,7 @@ class CheckOCRTestCase(unittest.TestCase):
         )
         stdout = io.StringIO()
 
-        with patch("pdf_tool.cli.check_ocr", return_value=mock_result):
+        with patch("pydf_tool.cli.check_ocr", return_value=mock_result):
             with redirect_stdout(stdout):
                 exit_code = main(["check", "scan.pdf"])
 
@@ -133,7 +133,7 @@ class OCRHelpersTestCase(unittest.TestCase):
 
 
 class TUIHelpersTestCase(unittest.TestCase):
-    @patch("pdf_tool.tui.get_terminal_size", return_value=os.terminal_size((60, 24)))
+    @patch("pydf_tool.tui.get_terminal_size", return_value=os.terminal_size((60, 24)))
     def test_dialog_width_shrinks_with_terminal(self, _mock_terminal_size) -> None:
         self.assertEqual(_dialog_width(72, minimum=44, margin=6), 54)
 
@@ -216,8 +216,8 @@ class CompressionHelpersTestCase(unittest.TestCase):
                 staged_output.write_bytes(b"small")
                 return None
 
-            with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                with patch("pdf_tool.compress.subprocess.run", side_effect=fake_run):
+            with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
+                with patch("pydf_tool.compress.subprocess.run", side_effect=fake_run):
                     result = compress_pdf(input_path, output_path, level="high")
 
         self.assertEqual(result.output_path, output_path)
@@ -247,8 +247,8 @@ class CompressionHelpersTestCase(unittest.TestCase):
                 staged_output.write_bytes(b"small")
                 return None
 
-            with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                with patch("pdf_tool.compress.subprocess.run", side_effect=fake_run):
+            with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
+                with patch("pydf_tool.compress.subprocess.run", side_effect=fake_run):
                     result = compress_pdf(
                         input_path,
                         output_path,
@@ -297,8 +297,8 @@ class CompressionHelpersTestCase(unittest.TestCase):
             fake_pypdf = types.SimpleNamespace(PdfReader=FakePdfReader)
 
             with patch.dict(sys.modules, {"pypdf": fake_pypdf}):
-                with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                    with patch("pdf_tool.compress.subprocess.Popen", FakePopen):
+                with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
+                    with patch("pydf_tool.compress.subprocess.Popen", FakePopen):
                         result = compress_pdf(
                             input_path,
                             output_path,
@@ -331,8 +331,8 @@ class CompressionHelpersTestCase(unittest.TestCase):
                 staged_output.write_bytes(b"small")
                 return None
 
-            with patch("pdf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                with patch("pdf_tool.compress.subprocess.run", side_effect=fake_run):
+            with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
+                with patch("pydf_tool.compress.subprocess.run", side_effect=fake_run):
                     result = compress_pdf(input_path, output_path, level="medium")
 
             self.assertEqual(result.output_path, output_path)
@@ -376,7 +376,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
                 },
             ):
                 with patch(
-                    "pdf_tool.ocr.shutil.which",
+                    "pydf_tool.ocr.shutil.which",
                     side_effect=lambda name: {
                         "tesseract": "/usr/local/bin/tesseract",
                         "pdftoppm": "/usr/local/bin/pdftoppm",
@@ -417,7 +417,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
                 },
             ):
                 with patch(
-                    "pdf_tool.ocr.shutil.which",
+                    "pydf_tool.ocr.shutil.which",
                     side_effect=lambda name: {
                         "tesseract": "/usr/local/bin/tesseract",
                         "pdftoppm": "/usr/local/bin/pdftoppm",
@@ -461,7 +461,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
                 },
             ):
                 with patch(
-                    "pdf_tool.ocr.shutil.which",
+                    "pydf_tool.ocr.shutil.which",
                     side_effect=lambda name: {
                         "tesseract": "/usr/local/bin/tesseract",
                         "pdftoppm": "/usr/local/bin/pdftoppm",
@@ -474,20 +474,20 @@ class OCRRuntimeTestCase(unittest.TestCase):
 
 class CLITestCase(unittest.TestCase):
     def test_main_without_args_starts_interactive_mode(self) -> None:
-        with patch("pdf_tool.cli._run_interactive_shell", return_value=0) as mock_shell:
+        with patch("pydf_tool.cli._run_interactive_shell", return_value=0) as mock_shell:
             exit_code = main([])
 
         self.assertEqual(exit_code, 0)
         mock_shell.assert_called_once_with()
 
     def test_main_interactive_subcommand_starts_shell(self) -> None:
-        with patch("pdf_tool.cli._run_interactive_shell", return_value=0) as mock_shell:
+        with patch("pydf_tool.cli._run_interactive_shell", return_value=0) as mock_shell:
             exit_code = main(["interactive"])
 
         self.assertEqual(exit_code, 0)
         mock_shell.assert_called_once_with()
 
-    @patch("pdf_tool.cli.run_ocr")
+    @patch("pydf_tool.cli.run_ocr")
     def test_main_dispatches_ocr(self, mock_run_ocr) -> None:
         mock_run_ocr.return_value = OCRResult(
             output_path=Path("scan.1.pdf"),
@@ -507,7 +507,7 @@ class CLITestCase(unittest.TestCase):
         )
         self.assertIn("OCR completato", stdout.getvalue())
 
-    @patch("pdf_tool.cli.compress_pdf")
+    @patch("pydf_tool.cli.compress_pdf")
     def test_main_dispatches_compress(self, mock_compress_pdf) -> None:
         mock_compress_pdf.return_value = type(
             "CompressionStub",
@@ -536,7 +536,7 @@ class CLITestCase(unittest.TestCase):
 
     def test_main_returns_error_code_for_pdf_tool_error(self) -> None:
         stderr = io.StringIO()
-        with patch("pdf_tool.cli.run_ocr", side_effect=PDFToolError("boom")):
+        with patch("pydf_tool.cli.run_ocr", side_effect=PDFToolError("boom")):
             with redirect_stderr(stderr):
                 exit_code = main(["ocr", "scan.pdf"])
 
@@ -562,8 +562,8 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("--lang", stdout.getvalue())
         self.assertIn("--output", stdout.getvalue())
 
-    @patch("pdf_tool.tui._run_with_progress", side_effect=lambda title, runner: runner(lambda update: None))
-    @patch("pdf_tool.tui.run_ocr")
+    @patch("pydf_tool.tui._run_with_progress", side_effect=lambda title, runner: runner(lambda update: None))
+    @patch("pydf_tool.tui.run_ocr")
     def test_dispatch_interactive_command_supports_direct_ocr_command(
         self,
         mock_run_ocr,
@@ -589,10 +589,10 @@ class CLITestCase(unittest.TestCase):
             progress_callback=unittest.mock.ANY,
         )
 
-    @patch("pdf_tool.tui._show_home_menu", side_effect=["ocr_tool", "exit"])
-    @patch("pdf_tool.tui._show_ocr_submenu", return_value="ocr")
-    @patch("pdf_tool.tui._prompt_ocr_args", return_value=argparse.Namespace(input="scan.pdf", lang="it", output=None))
-    @patch("pdf_tool.tui._run_ocr_interactive", return_value=0)
+    @patch("pydf_tool.tui._show_home_menu", side_effect=["ocr_tool", "exit"])
+    @patch("pydf_tool.tui._show_ocr_submenu", return_value="ocr")
+    @patch("pydf_tool.tui._prompt_ocr_args", return_value=argparse.Namespace(input="scan.pdf", lang="it", output=None))
+    @patch("pydf_tool.tui._run_ocr_interactive", return_value=0)
     def test_interactive_shell_runs_guided_ocr_flow(
         self,
         mock_run_ocr_interactive,
@@ -604,7 +604,7 @@ class CLITestCase(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mock_run_ocr_interactive.assert_called_once()
 
-    @patch("pdf_tool.tui._show_help_screen")
+    @patch("pydf_tool.tui._show_help_screen")
     def test_dispatch_interactive_command_supports_help(self, mock_help) -> None:
         exit_code = _dispatch_interactive_command("help")
         self.assertEqual(exit_code, 0)
@@ -626,10 +626,10 @@ class CLITestCase(unittest.TestCase):
             pyproject = tomllib.load(file_obj)
 
         scripts = pyproject["project"]["scripts"]
-        self.assertEqual(scripts["pydf-tool"], "pdf_tool.cli:main")
+        self.assertEqual(scripts["pydf-tool"], "pydf_tool.cli:main")
 
     def test_entry_point_target_is_callable(self) -> None:
-        from pdf_tool.cli import main
+        from pydf_tool.cli import main
 
         self.assertTrue(callable(main))
 

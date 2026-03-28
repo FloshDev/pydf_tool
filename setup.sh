@@ -18,7 +18,7 @@ pip install -e .
 
 echo "==> Iniezione PYTHONPATH nello script di attivazione..."
 # PYTHONPATH nel file activate sopravvive ai reinstall di pip (pip non tocca activate).
-# Questo garantisce che pdf_tool sia trovabile anche se il wrapper viene rigenerato.
+# Questo garantisce che pydf_tool sia trovabile anche se il wrapper viene rigenerato.
 ACTIVATE="$VENV/bin/activate"
 PYTHONPATH_LINE="export PYTHONPATH=\"$SRC_PATH\${PYTHONPATH:+:\$PYTHONPATH}\""
 if ! grep -qF "# PyDF Tool PYTHONPATH" "$ACTIVATE"; then
@@ -46,13 +46,13 @@ content = textwrap.dedent(f"""\
     import os as _os
 
     # Workaround Python.org Python 3.12 macOS: la cartella .venv riceve il flag
-    # UF_HIDDEN; site.py salta tutti i .pth file hidden e pdf_tool risulta
+    # UF_HIDDEN; site.py salta tutti i .pth file hidden e pydf_tool risulta
     # invisibile. Questo blocco inietta src/ in sys.path prima dell'import.
     _src = "{src_path}"
     if _os.path.isdir(_src) and _src not in sys.path:
         sys.path.insert(0, _src)
 
-    from pdf_tool.cli import main
+    from pydf_tool.cli import main
     if __name__ == '__main__':
         sys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])
         sys.exit(main())

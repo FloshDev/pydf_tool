@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pydf-tool = "pdf_tool.cli:main"
+pydf-tool = "pydf_tool.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
