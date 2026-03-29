@@ -13,8 +13,8 @@ from .progress import OperationProgress
 from .utils import (
     ensure_distinct_paths,
     ensure_pdf_input,
-    resolve_user_path,
     resolve_incremental_output_path,
+    resolve_user_path,
 )
 
 PRESET_STRENGTHS = {
@@ -74,9 +74,7 @@ def resolve_compression_profile(level: str) -> CompressionProfile:
                 "Livello non valido. Usa `low`, `medium`, `high` o un numero tra 1 e 100."
             ) from exc
         if not 1 <= strength <= 100:
-            raise PDFToolError(
-                "Il livello numerico deve essere compreso tra 1 e 100."
-            )
+            raise PDFToolError("Il livello numerico deve essere compreso tra 1 e 100.")
         label = str(strength)
 
     dpi = 300 - round(((strength - 1) / 99) * (300 - 72))
@@ -167,16 +165,16 @@ def compress_pdf(
             shutil.copy2(source, staged_source)
 
         command = [
-        "gs",
-        "-sDEVICE=pdfwrite",
-        "-dCompatibilityLevel=1.4",
-        "-dNOPAUSE",
-        "-dBATCH",
-        "-dAutoRotatePages=/None",
-        "-dDetectDuplicateImages=true",
-        "-dCompressFonts=true",
-        "-dSubsetFonts=true",
-        "-dEmbedAllFonts=true",
+            "gs",
+            "-sDEVICE=pdfwrite",
+            "-dCompatibilityLevel=1.4",
+            "-dNOPAUSE",
+            "-dBATCH",
+            "-dAutoRotatePages=/None",
+            "-dDetectDuplicateImages=true",
+            "-dCompressFonts=true",
+            "-dSubsetFonts=true",
+            "-dEmbedAllFonts=true",
         ]
 
         if grayscale:
@@ -212,7 +210,9 @@ def compress_pdf(
             quiet_command = command.copy()
             quiet_command.append("-dQUIET")
             try:
-                subprocess.run(quiet_command, check=True, capture_output=True, text=True)
+                subprocess.run(
+                    quiet_command, check=True, capture_output=True, text=True
+                )
             except subprocess.CalledProcessError as exc:
                 details = exc.stderr.strip() or exc.stdout.strip() or str(exc)
                 raise PDFToolError(f"Compressione fallita: {details}") from exc

@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import argparse
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from shutil import get_terminal_size
 from textwrap import shorten, wrap
-from typing import Callable
 
 from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
 from .ocr import OCRResult, run_ocr
 from .progress import OperationProgress
-from .utils import ensure_pdf_input, format_size_change, resolve_incremental_output_path, resolve_user_path
+from .utils import (
+    ensure_pdf_input,
+    format_size_change,
+    resolve_incremental_output_path,
+    resolve_user_path,
+)
 
 EXIT_COMMANDS = {"exit", "quit", ":q"}
 APP_NAME = "PyDF Tool"
@@ -39,8 +43,8 @@ def _load_prompt_toolkit():
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.layout import HSplit, Layout, VSplit, Window
         from prompt_toolkit.layout.containers import DynamicContainer
-        from prompt_toolkit.layout.dimension import D
         from prompt_toolkit.layout.controls import FormattedTextControl
+        from prompt_toolkit.layout.dimension import D
         from prompt_toolkit.styles import Style
         from prompt_toolkit.widgets import Dialog, Label, RadioList, TextArea
     except ImportError as exc:
@@ -325,7 +329,9 @@ def _show_home_menu() -> str | None:
     def _box_bottom(box_width: int) -> list[tuple[str, str]]:
         return [("class:app_border", "└" + "─" * (box_width - 2) + "┘\n")]
 
-    def _box_line(box_width: int, content: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    def _box_line(
+        box_width: int, content: list[tuple[str, str]]
+    ) -> list[tuple[str, str]]:
         return [("class:app_border", "│ ")] + content + [("class:app_border", " │\n")]
 
     def _box_blank(box_width: int) -> list[tuple[str, str]]:
@@ -341,9 +347,13 @@ def _show_home_menu() -> str | None:
         frags: list[tuple[str, str]] = []
         frags += _box_top(box_w, APP_NAME, "class:app_brand")
         if tagline:
-            frags += _box_line(box_w, [("class:app_tagline", tagline.ljust(inner_w)[:inner_w])])
+            frags += _box_line(
+                box_w, [("class:app_tagline", tagline.ljust(inner_w)[:inner_w])]
+            )
         for line in summary_lines:
-            frags += _box_line(box_w, [("class:app_header", line.ljust(inner_w)[:inner_w])])
+            frags += _box_line(
+                box_w, [("class:app_header", line.ljust(inner_w)[:inner_w])]
+            )
         frags += _box_bottom(box_w)
         return frags
 
@@ -368,15 +378,25 @@ def _show_home_menu() -> str | None:
             selected = index == state["index"]
             marker = "> " if selected else "  "
             title_style = "class:home_title_active" if selected else "class:home_title"
-            summary_style = "class:home_summary_active" if selected else "class:home_summary"
-            marker_style = "class:home_marker_active" if selected else "class:home_marker"
-            frags += _box_line(menu_width, [
-                (marker_style, marker),
-                (title_style, _fit_line(action.title, inner_w - 2)),
-            ])
-            frags += _box_line(menu_width, [
-                (summary_style, "  " + _fit_line(action.summary, inner_w - 2)),
-            ])
+            summary_style = (
+                "class:home_summary_active" if selected else "class:home_summary"
+            )
+            marker_style = (
+                "class:home_marker_active" if selected else "class:home_marker"
+            )
+            frags += _box_line(
+                menu_width,
+                [
+                    (marker_style, marker),
+                    (title_style, _fit_line(action.title, inner_w - 2)),
+                ],
+            )
+            frags += _box_line(
+                menu_width,
+                [
+                    (summary_style, "  " + _fit_line(action.summary, inner_w - 2)),
+                ],
+            )
             if item_gap and index < len(actions) - 1:
                 frags += _box_blank(menu_width)
         frags += _box_bottom(menu_width)
@@ -394,14 +414,22 @@ def _show_home_menu() -> str | None:
         frags += _box_top(detail_width, "Anteprima", "class:detail_section")
         frags += _box_blank(detail_width)
         for line in _wrap_lines(action.title, inner_w, 1):
-            frags += _box_line(detail_width, [("class:detail_heading", line.ljust(inner_w)[:inner_w])])
+            frags += _box_line(
+                detail_width, [("class:detail_heading", line.ljust(inner_w)[:inner_w])]
+            )
         frags += _box_blank(detail_width)
         for line in _wrap_lines(action.detail, inner_w, detail_lines_n):
-            frags += _box_line(detail_width, [("class:detail_text", line.ljust(inner_w)[:inner_w])])
+            frags += _box_line(
+                detail_width, [("class:detail_text", line.ljust(inner_w)[:inner_w])]
+            )
         frags += _box_blank(detail_width)
-        frags += _box_line(detail_width, [("class:detail_label", "Comando".ljust(inner_w)[:inner_w])])
+        frags += _box_line(
+            detail_width, [("class:detail_label", "Comando".ljust(inner_w)[:inner_w])]
+        )
         for line in _wrap_lines(action.example, inner_w, command_lines_n):
-            frags += _box_line(detail_width, [("class:detail_code", line.ljust(inner_w)[:inner_w])])
+            frags += _box_line(
+                detail_width, [("class:detail_code", line.ljust(inner_w)[:inner_w])]
+            )
         frags += _box_blank(detail_width)
         frags += _box_bottom(detail_width)
         return frags
@@ -781,7 +809,9 @@ def _prompt_output_path(
 
 
 def _prompt_ocr_args(input_path_default: str = "") -> argparse.Namespace | None:
-    input_path = _ask_text("Esegui OCR", "Percorso del PDF di input", default=input_path_default)
+    input_path = _ask_text(
+        "Esegui OCR", "Percorso del PDF di input", default=input_path_default
+    )
     if not input_path:
         return None
     input_path = _clean_path_input(input_path)
@@ -929,9 +959,8 @@ def _show_check_result(result: CheckOCRResult, input_path: str) -> str | None:
                 ("no", "Torna al menu"),
             ],
         )
-    else:
-        _show_info_dialog("Verifica OCR — risultato", body_text)
-        return None
+    _show_info_dialog("Verifica OCR — risultato", body_text)
+    return None
 
 
 def _run_check_interactive(args: argparse.Namespace) -> int:

@@ -11,8 +11,8 @@ from .progress import OperationProgress
 from .utils import (
     ensure_distinct_paths,
     ensure_pdf_input,
-    resolve_user_path,
     resolve_incremental_output_path,
+    resolve_user_path,
 )
 
 SUPPORTED_LANGUAGE_CODES = {
@@ -175,11 +175,15 @@ def run_ocr(
                         "Verifica che Poppler sia installato e il PDF valido."
                     ) from exc
                 if not page_imgs:
-                    raise PDFToolError(f"Nessuna immagine prodotta per la pagina {page_num}.")
+                    raise PDFToolError(
+                        f"Nessuna immagine prodotta per la pagina {page_num}."
+                    )
                 image = page_imgs[0]
                 del page_imgs
                 try:
-                    text = pytesseract.image_to_string(image, lang=tesseract_lang).strip()
+                    text = pytesseract.image_to_string(
+                        image, lang=tesseract_lang
+                    ).strip()
                 except Exception as exc:
                     raise PDFToolError(
                         f"OCR fallito sulla pagina {page_num}. "
@@ -212,7 +216,9 @@ def run_ocr(
                 completed=page_count,
                 total=page_count,
             )
-            return OCRResult(output_path=destination, pages=page_count, output_type="txt")
+            return OCRResult(
+                output_path=destination, pages=page_count, output_type="txt"
+            )
 
         writer = PdfWriter()
         for page_num in range(1, page_count + 1):
@@ -230,7 +236,9 @@ def run_ocr(
                     "Verifica che Poppler sia installato e il PDF valido."
                 ) from exc
             if not page_imgs:
-                raise PDFToolError(f"Nessuna immagine prodotta per la pagina {page_num}.")
+                raise PDFToolError(
+                    f"Nessuna immagine prodotta per la pagina {page_num}."
+                )
             image = page_imgs[0]
             del page_imgs
             try:
@@ -267,7 +275,9 @@ def run_ocr(
             with destination.open("wb") as file_obj:
                 writer.write(file_obj)
         except Exception as exc:
-            raise PDFToolError(f"Scrittura del file OCR fallita: {destination}") from exc
+            raise PDFToolError(
+                f"Scrittura del file OCR fallita: {destination}"
+            ) from exc
 
         _emit_progress(
             progress_callback,
@@ -316,7 +326,9 @@ def run_ocr(
                     "Verifica lingua OCR e installazione di Tesseract."
                 ) from exc
             page_header = f"--- Pagina {index} ---"
-            page_texts_batch.append(page_header if not text else f"{page_header}\n{text}")
+            page_texts_batch.append(
+                page_header if not text else f"{page_header}\n{text}"
+            )
             _emit_progress(
                 progress_callback,
                 stage="ocr",

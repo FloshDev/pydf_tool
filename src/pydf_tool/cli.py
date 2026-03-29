@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .check_ocr import check_ocr
 from .compress import compress_pdf
@@ -88,7 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("ocr", "compress", "check", "interactive"),
         help="Comando di cui mostrare l'aiuto.",
     )
-    help_parser.set_defaults(handler=lambda args, parser=parser: _handle_help(args, parser))
+    help_parser.set_defaults(
+        handler=lambda args, parser=parser: _handle_help(args, parser)
+    )
 
     return parser
 

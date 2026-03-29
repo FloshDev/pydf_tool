@@ -182,6 +182,98 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 - Suite 35 test: verde
 - Modulo rinominato `pydf_tool` (era `pdf_tool`) — entry point, test, wrapper, docs aggiornati
 - TUI: layout box-drawing Unicode con palette CLAUDE.md, sfondo trasparente
+- Code quality: ruff clean (F401, I001, UP035, RET505 risolti), formatting applicato
+
+### In corso (2026-03-29) — Sessione 2.0
+
+**Migrazione TUI: prompt_toolkit + rich → Textual (Issue #3)**
+
+Obiettivo: eliminare l'alternanza prompt_toolkit/rich che rende la TUI fragile su terminali
+non-standard. Textual unifica layout, dialog, progress e keybinding in un solo framework
+reattivo (modello CSS + widget).
+
+Stato: design approvato (tutte le sezioni). Piano implementativo da scrivere.
+Spec: `docs/superpowers/specs/2026-03-29-textual-migration-design.md` ✓ scritta
+
+### Decisioni di design approvate (brainstorming 2026-03-29)
+
+**Wizard style: Stepper (opzione B)**
+- Una singola WizardScreen con indicatore di passo in cima (es. "1. File  ▶ 2. Lingua  3. Formato  4. Output")
+- Il contenuto cambia al passo corrente, il titolo e la barra step restano visibili
+- Esc torna al passo precedente (o alla home se al passo 1)
+
+**Progress screen: Schermata dedicata (opzione A)**
+- App.push_screen(ProgressScreen) quando parte l'operazione
+- Copre tutta la finestra: niente home in background
+- L'operazione gira in un Textual Worker (thread separato)
+- Aggiornamenti via app.call_from_thread()
+- Al termine: contenuto cambia da progress bar a riepilogo risultato
+- "Invio per tornare al menu" → pop_screen()
+
+**Struttura App:**
+```
+PyDFApp (textual.App)
+├── HomeScreen           ← menu + pannello anteprima (layout two-panel)
+├── WizardScreen         ← stepper per OCR (4 passi) e Comprimi (4 passi)
+├── ProgressScreen       ← avanzamento operazione lunga + risultato
+├── CheckResultScreen    ← risultato Verifica OCR (check è sincrono, < 1s)
+└── HelpScreen           ← modal overlay help
+```
+
+**Nota Verifica OCR:** `check_ocr()` è sincrona e veloce — nessuna ProgressScreen.
+Il risultato appare in CheckResultScreen; se `ocr_needed`/`mixed`, offre di lanciare WizardScreen OCR con path precompilato.
+
+**HomeScreen header (opzione D approvata):**
+```
+┌──────────────────────────────────────────────────┐
+│                                                  │
+│   ╠══ PyDF Tool ══╣   OCR  ·  compress  ·  check │
+│                                                  │
+│   ─────────────────────────────────────────────  │
+│   strumenti PDF da riga di comando · macOS       │
+│                                                  │
+└──────────────────────────────────────────────────┘
+```
+Il titolo è incorniciato con `╠══╣`, affiancato dalle tre funzioni chiave.
+Separatore orizzontale divide titolo dalla tagline.
+
+**Entry point:** `run_interactive_app(parser_factory, executor)` — firma invariata, cli.py non cambia.
+
+**Dipendenze:**
+- `textual` entra in pyproject.toml
+- `prompt_toolkit` esce da pyproject.toml
+- `rich` esce come dipendenza diretta (Textual lo porta come dipendenza interna)
+
+**File invariati:** `cli.py`, `ocr.py`, `compress.py`, `check_ocr.py`, `utils.py`, `progress.py`, `errors.py`
+**File riscritto:** `tui.py` (da zero, stesso nome)
+**CSS Textual:** `src/pydf_tool/tui.tcss` (nuovo file con palette CLAUDE.md)
+
+**Palette CLAUDE.md invariata:**
+- Accento: `#E8B84B` — voce selezionata, titoli, step attivo
+- Testo: `#D4D4D4`
+- Secondario: `#7A7A7A` — hint, label, step inattivi
+- Bordi: `#3A3A3A`
+- Errore: `#E85B4B`
+- Successo: `#4BE87A`
+- Sfondo: trasparente (nessun `background` esplicito nel CSS)
+
+**Test:** i 4 test che testano funzioni di tui.py (`_dialog_width`, `_wrap_dialog_text`,
+mock di `_show_home_menu`/`_show_ocr_submenu`) saranno aggiornati; i 31 test backend restano invariati.
+
+### Fix applicati (2026-03-29) — Sessione 2.0
+
+**Code quality (ruff):**
+- `tui.py`: rimosso `from pathlib import Path` inutilizzato (F401)
+- `tui.py`: `from typing import Callable` → `from collections.abc import Callable` (UP035)
+- `cli.py`: `from typing import Sequence` → `from collections.abc import Sequence` (UP035)
+- `compress.py` + `ocr.py`: ordinamento alfabetico import nel blocco `from .utils import` (I001)
+- `tui.py:959`: rimosso `else` superfluo dopo `return` in `_show_check_result` (RET505)
+- Formatting (ruff format): indentazione lista `command` in `compress.py`, line-length 88 in più punti
+
+**Debito tecnico noto (non toccato):**
+- `_emit_progress` duplicata verbatim in `ocr.py` e `compress.py` — spostare in `progress.py`
+- `bare except Exception` in `check_ocr.py:47` — intentionale (pypdf su pagine corrotte)
+- Import lazy dentro funzione (`from pypdf import ...`) — intentionale (lazy load)
 
 ### Fix applicati (2026-03-28) — Sessione 1.0
 
@@ -262,11 +354,12 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 **~~Issue #2 — TUI: monkey-patch `_handle_enter` su RadioList~~** — RISOLTO (2026-03-28)
 - Sostituito con `@kb.add("enter", eager=True)` + `radio_list.values[radio_list._selected_index][0]`
 
-**Issue #3 — TUI: alternanza prompt_toolkit / rich**
-- File: `tui.py:997-1037`
+**Issue #3 — TUI: alternanza prompt_toolkit / rich** ← IN LAVORAZIONE (2026-03-29)
+- File: `tui.py` (tutto il file verrà riscritto)
 - Ogni ciclo: prompt_toolkit full-screen → rich Console → prompt_toolkit
 - Strutturalmente fragile su terminali non-standard
-- Mitigazione a lungo termine: unificare su un solo framework
+- Soluzione scelta: migrazione a **Textual** (framework TUI unificato)
+- Spec in scrittura → poi piano implementativo → poi esecuzione
 
 **~~Issue #4 — Validazione path input troppo tardiva nel wizard TUI~~** — RISOLTO (2026-03-28)
 - `ensure_pdf_input()` ora chiamata in tutti e tre i wizard subito dopo `_ask_text()`; errore mostrato con `_show_info_dialog()` prima di aprire dialog successivi
@@ -304,7 +397,7 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 | 5 | ~~**Issue #2** — Fix monkey-patch RadioList~~ | Fix | FATTO |
 | 6 | Colmare gap test (OCR .pdf, compress TUI, utils) | Test | Media |
 | 7 | **Issue #6** — OCR in thread worker | Arch | Bassa |
-| 8 | **Issue #3** — Unificare framework TUI | Arch | Bassa |
+| 8 | ~~**Issue #3** — Unificare framework TUI~~ → **IN CORSO**: migrazione a Textual | Arch | In corso |
 
 ---
 

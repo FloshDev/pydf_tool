@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .errors import PDFToolError
 
-
 _UNICODE_NORMALIZATION_FORMS = ("NFC", "NFD", "NFKC", "NFKD")
 
 
@@ -86,7 +85,4 @@ def format_size_change(size_before: int, size_after: int) -> str:
 
     delta = size_after - size_before
     percent = (delta / size_before) * 100
-    return (
-        f"{human_size(size_before)} -> {human_size(size_after)} "
-        f"({percent:+.1f}%)"
-    )
+    return f"{human_size(size_before)} -> {human_size(size_after)} ({percent:+.1f}%)"
