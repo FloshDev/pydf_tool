@@ -1,0 +1,106 @@
+<h2>Come funzionano i wizard nella nuova TUI?</h2>
+<p class="subtitle">
+  Ogni wizard (OCR, Comprimi, Verifica) richiede più passaggi: inserire il file, scegliere opzioni, confermare l'output.
+  Come vuoi che vengano mostrati questi passaggi?
+</p>
+
+<style>
+  .term {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    background: #1a1a1a;
+    border-radius: 6px;
+    padding: 16px;
+    line-height: 1.6;
+    color: #D4D4D4;
+    min-height: 220px;
+  }
+  .term-accent { color: #E8B84B; font-weight: bold; }
+  .term-dim { color: #7A7A7A; }
+  .term-border { color: #3A3A3A; }
+  .term-success { color: #4BE87A; }
+  .term-error { color: #E85B4B; }
+  .term-selected { color: #E8B84B; font-weight: bold; }
+  .term-hint { color: #7A7A7A; font-size: 11px; margin-top: 8px; }
+  .step-badge {
+    display: inline-block;
+    background: #3A3A3A;
+    color: #7A7A7A;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+  .step-badge.active {
+    background: #E8B84B22;
+    color: #E8B84B;
+    border: 1px solid #E8B84B44;
+  }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="term">
+        <span class="step-badge active">Passo 1 di 4</span><br>
+        <span class="term-accent">┌─ Esegui OCR ──────────────────────────────┐</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">Percorso del PDF di input</span>              <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span> <span style="color:#D4D4D4">▌ /Users/mario/documenti/scan.pdf</span>       <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>                                           <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">Invio continua  Esc annulla</span>              <span class="term-accent">│</span><br>
+        <span class="term-accent">└───────────────────────────────────────────┘</span>
+        <div class="term-hint">→ Invio: si apre il passo successivo (lingua OCR)<br>→ ogni passo sostituisce il precedente</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Schermate a passi</h3>
+      <p>Ogni passo è una nuova schermata full-screen. Invio avanza, Esc torna indietro. Il wizard "cammina" step-by-step. Approccio più simile all'attuale.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="term">
+        <span class="term-accent">┌─ Esegui OCR ──────────────────────────────┐</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">1. File</span>  <span class="term-accent">▶ 2. Lingua</span>  <span class="term-dim">3. Formato  4. Output</span>  <span class="term-accent">│</span><br>
+        <span class="term-accent">├───────────────────────────────────────────┤</span><br>
+        <span class="term-accent">│</span>                                           <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>  <span class="term-dim">Lingua OCR</span>                               <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>  <span class="term-selected">&gt; Italiano</span>                               <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>    English                                <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>    Italiano + English                     <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>                                           <span class="term-accent">│</span><br>
+        <span class="term-accent">└───────────────────────────────────────────┘</span>
+        <div class="term-hint">→ barra in cima mostra sempre a che punto sei<br>→ si può tornare a un passo precedente cliccando</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Stepper con barra progresso</h3>
+      <p>Un'unica schermata del wizard con indicatore di passo in cima. Il contenuto cambia al passo corrente ma il contesto (titolo, barra) rimane visibile.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="term">
+        <span class="term-accent">┌─ Home ────────────────────────────────────┐</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">&gt; Strumento OCR</span>                          <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">  Comprimi PDF</span>                            <span class="term-accent">│</span><br>
+        <span class="term-accent">│┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">File</span>    <span style="color:#D4D4D4">▌ scan.pdf</span>                      <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">Lingua</span>  <span class="term-selected">● Italiano</span>  <span class="term-dim">○ Eng</span>  <span class="term-dim">○ Ita+Eng</span>    <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span> <span class="term-dim">Output</span>  <span style="color:#D4D4D4">▌ scan.1.pdf</span>                    <span class="term-accent">│</span><br>
+        <span class="term-accent">│</span>                  <span class="term-success">[  Avvia OCR  ]</span>           <span class="term-accent">│</span><br>
+        <span class="term-accent">└───────────────────────────────────────────┘</span>
+        <div class="term-hint">→ il form appare nella metà inferiore della home<br>→ nessun cambio di schermata, tutto in un'unica vista</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Form inline nella home</h3>
+      <p>Selezionando un'azione, il form appare direttamente nella schermata principale (sotto il menu). Nessuna navigazione tra schermate — tutto in vista. Più compatto, meno "cinematico".</p>
+    </div>
+  </div>
+
+</div>
