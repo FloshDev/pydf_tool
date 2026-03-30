@@ -221,7 +221,7 @@ class WizardScreen(Screen):
         self.query_one("#step-prompt", Static).update(steps[step].prompt)
         inp = self.query_one("#step-input", Input)
         inp.placeholder = steps[step].placeholder
-        inp.value = ""
+        inp.value = self._values.get(steps[step].name.lower(), "")
         inp.focus()
         self.query_one("#step-error", Static).update("")
 

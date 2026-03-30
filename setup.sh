@@ -16,6 +16,14 @@ echo "==> Installazione dipendenze..."
 source "$VENV/bin/activate"
 pip install -e .
 
+echo "==> Rimozione flag UF_HIDDEN dai file installati..."
+# Su Python.org Python 3.12 / macOS, python3 -m venv imposta UF_HIDDEN sull'intera
+# cartella .venv. pip installa i file ma alcuni risultano invisibili a Python (e a find)
+# perché il flag viene ereditato. chflags li rende di nuovo visibili.
+# Senza questo step, textual/__init__.py, rich/_palettes.py e altri file critici
+# risultano mancanti dal punto di vista dell'import system, causando ImportError.
+chflags -R nohidden "$VENV"
+
 echo "==> Iniezione PYTHONPATH nello script di attivazione..."
 # PYTHONPATH nel file activate sopravvive ai reinstall di pip (pip non tocca activate).
 # Questo garantisce che pydf_tool sia trovabile anche se il wrapper viene rigenerato.
