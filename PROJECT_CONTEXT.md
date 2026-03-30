@@ -11,7 +11,7 @@ Leggere questo file è sufficiente per riprendere il lavoro senza rileggere il c
 - Comando: `pydf-tool`
 - Linguaggio: Python 3.10+
 - Piattaforma target: macOS
-- Modalità: TUI interattiva (`prompt_toolkit` + `rich`) e CLI diretta (`argparse`)
+- Modalità: TUI interattiva (`textual`) e CLI diretta (`argparse`)
 - Funzioni attuali: OCR di PDF scansionati, compressione PDF
 
 ---
@@ -30,7 +30,8 @@ Leggere questo file è sufficiente per riprendere il lavoro senza rileggere il c
 │       ├── __init__.py
 │       ├── __main__.py    # entry point per `python -m pydf_tool`
 │       ├── cli.py         # argparse, routing CLI/TUI, error boundary
-│       ├── tui.py         # TUI full-screen, dialog, progress
+│       ├── tui.py         # TUI Textual (in migrazione da prompt_toolkit+rich)
+│       ├── tui.tcss       # CSS Textual con palette CLAUDE.md
 │       ├── ocr.py         # pipeline OCR (pdf2image + pytesseract + pypdf)
 │       ├── compress.py    # pipeline compressione (Ghostscript)
 │       ├── progress.py    # dataclass OperationProgress
@@ -49,14 +50,16 @@ Leggere questo file è sufficiente per riprendere il lavoro senza rileggere il c
 | Pacchetto | Versione |
 |---|---|
 | pdf2image | 1.17.0 |
-| prompt_toolkit | 3.0.42 |
+| textual | >=0.70.0 (installata: 8.2.1) |
 | pypdf | 6.8.0 |
 | pytesseract | 0.3.13 |
-| rich | 13.7.1 |
 | Pillow | >=10.3.0,<12.0 |
 
-Nota: `Pillow==12.x` è incompatibile con `pypdf==6.8.0` (accesso a `PIL.__version__` rimosso).
-Il pin è stato corretto a `>=10.3.0,<12.0`.
+Note:
+- `prompt_toolkit` e `rich` rimossi come dipendenze dirette (2026-03-30, Issue #3).
+  `rich` resta presente come dipendenza transitiva di `textual`.
+- `Pillow==12.x` è incompatibile con `pypdf==6.8.0` (accesso a `PIL.__version__` rimosso).
+  Il pin è stato corretto a `>=10.3.0,<12.0`.
 
 ### Sistema (Homebrew)
 
@@ -134,12 +137,13 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 
 ### tui.py
 
-- `run_interactive_app()`: event loop principale (while True → home menu → azione)
-- `_show_home_menu()`: prompt_toolkit full-screen Application
-- `_ask_choice()` / `_ask_text()`: dialog input utente
-- `_run_with_progress()`: rich Console + Progress bar durante operazione
-- `dispatch_interactive_command()`: parsa comandi manuali nella TUI
-- Architettura: alterna prompt_toolkit (menu/dialog) e rich (progress) — vedi Issue #3
+- `run_interactive_app()`: avvia `PyDFApp` (Textual) — firma invariata, cli.py non cambia
+- `dispatch_interactive_command()`: parsa comandi CLI testuali — firma invariata
+- `PyDFApp`: `textual.App`, monta `HomeScreen` all'avvio, carica `tui.tcss`
+- `HomeScreen`: layout two-panel (ListView menu + preview Static), HelpScreen modal su H/F1
+- `WizardScreen`: stepper 4 passi per OCR e Comprimi; validazione inline per step File
+- `CheckInputScreen` / `CheckResultScreen`: flusso Verifica OCR sincrono (< 1s, no Worker)
+- `ProgressScreen`: operazione in `@work(thread=True)`; aggiornamenti via `call_from_thread()`; cancellazione via `threading.Event`
 
 ### ocr.py
 
@@ -184,16 +188,27 @@ pydf-tool ocr "input.pdf" --lang it --output /tmp/test.pdf
 - TUI: layout box-drawing Unicode con palette CLAUDE.md, sfondo trasparente
 - Code quality: ruff clean (F401, I001, UP035, RET505 risolti), formatting applicato
 
-### In corso (2026-03-29) — Sessione 2.0
+### Completato (2026-03-30) — Sessione 3.0
 
-**Migrazione TUI: prompt_toolkit + rich → Textual (Issue #3)**
+**Migrazione TUI: prompt_toolkit + rich → Textual (Issue #3) — COMPLETATA**
 
 Obiettivo: eliminare l'alternanza prompt_toolkit/rich che rende la TUI fragile su terminali
 non-standard. Textual unifica layout, dialog, progress e keybinding in un solo framework
 reattivo (modello CSS + widget).
 
-Stato: design approvato (tutte le sezioni). Piano implementativo da scrivere.
-Spec: `docs/superpowers/specs/2026-03-29-textual-migration-design.md` ✓ scritta
+**Tutte le fasi completate:**
+- Phase 1: `pyproject.toml` aggiornato; `tui.tcss` creato con palette CLAUDE.md
+- Phase 2: `PyDFApp` + `HomeScreen` (two-panel) + `HelpScreen` (modal)
+- Phase 3: `WizardScreen` stepper (4 passi OCR, 4 passi Comprimi) con validazione inline
+- Phase 4: `CheckInputScreen` + `CheckResultScreen` con offerta avvio OCR se necessario
+- Phase 5: `ProgressScreen` con `@work(thread=True)` + `threading.Event` per cancellazione
+- Phase 6: entry points `run_interactive_app` e `dispatch_interactive_command` (firme invariate)
+- Phase 7: test aggiornati — rimossi `_dialog_width`/`_wrap_dialog_text`; aggiornato mock a `PyDFApp.run`
+
+**Suite: 33 test, tutti verdi** (da 35: rimossi 2 test di funzioni non più esistenti)
+
+Spec: `docs/superpowers/specs/2026-03-29-textual-migration-design.md` ✓
+Piano: `docs/superpowers/plans/2026-03-30-textual-migration-plan.md` ✓
 
 ### Decisioni di design approvate (brainstorming 2026-03-29)
 
@@ -354,12 +369,10 @@ mock di `_show_home_menu`/`_show_ocr_submenu`) saranno aggiornati; i 31 test bac
 **~~Issue #2 — TUI: monkey-patch `_handle_enter` su RadioList~~** — RISOLTO (2026-03-28)
 - Sostituito con `@kb.add("enter", eager=True)` + `radio_list.values[radio_list._selected_index][0]`
 
-**Issue #3 — TUI: alternanza prompt_toolkit / rich** ← IN LAVORAZIONE (2026-03-29)
-- File: `tui.py` (tutto il file verrà riscritto)
-- Ogni ciclo: prompt_toolkit full-screen → rich Console → prompt_toolkit
-- Strutturalmente fragile su terminali non-standard
-- Soluzione scelta: migrazione a **Textual** (framework TUI unificato)
-- Spec in scrittura → poi piano implementativo → poi esecuzione
+**~~Issue #3 — TUI: alternanza prompt_toolkit / rich~~** — RISOLTO (2026-03-30)
+- `tui.py` riscritto interamente in Textual (tutte le 7 fasi completate)
+- Spec: `docs/superpowers/specs/2026-03-29-textual-migration-design.md`
+- Piano: `docs/superpowers/plans/2026-03-30-textual-migration-plan.md`
 
 **~~Issue #4 — Validazione path input troppo tardiva nel wizard TUI~~** — RISOLTO (2026-03-28)
 - `ensure_pdf_input()` ora chiamata in tutti e tre i wizard subito dopo `_ask_text()`; errore mostrato con `_show_info_dialog()` prima di aprire dialog successivi
@@ -397,7 +410,7 @@ mock di `_show_home_menu`/`_show_ocr_submenu`) saranno aggiornati; i 31 test bac
 | 5 | ~~**Issue #2** — Fix monkey-patch RadioList~~ | Fix | FATTO |
 | 6 | Colmare gap test (OCR .pdf, compress TUI, utils) | Test | Media |
 | 7 | **Issue #6** — OCR in thread worker | Arch | Bassa |
-| 8 | ~~**Issue #3** — Unificare framework TUI~~ → **IN CORSO**: migrazione a Textual | Arch | In corso |
+| 8 | ~~**Issue #3** — Unificare framework TUI → migrazione a Textual~~ | Arch | FATTO |
 
 ---
 

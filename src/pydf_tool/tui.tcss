@@ -1,0 +1,141 @@
+/* Variabili colore — palette CLAUDE.md */
+$accent: #E8B84B;
+$text: #D4D4D4;
+$secondary: #7A7A7A;
+$border: #3A3A3A;
+$error: #E85B4B;
+$success: #4BE87A;
+
+/* Nessun background esplicito — sfondo sempre trasparente */
+
+Screen {
+    color: $text;
+}
+
+#header {
+    color: $accent;
+    border: solid $border;
+    padding: 1 2;
+    height: auto;
+}
+
+#footer-bar {
+    color: $secondary;
+    border-top: solid $border;
+    padding: 0 2;
+    height: 1;
+}
+
+ListView {
+    border: solid $border;
+    background: transparent;
+}
+
+ListView > ListItem {
+    color: $text;
+    background: transparent;
+}
+
+ListView > ListItem.--highlight {
+    color: $accent;
+    text-style: bold;
+    background: transparent;
+}
+
+#body {
+    height: 1fr;
+}
+
+#menu-list {
+    width: 32;
+    border: solid $border;
+    background: transparent;
+}
+
+#preview-panel {
+    width: 1fr;
+    border: solid $border;
+    padding: 1 2;
+    color: $secondary;
+}
+
+.step-indicator {
+    color: $secondary;
+    padding: 0 2;
+}
+
+.step-indicator .active {
+    color: $accent;
+    text-style: bold;
+}
+
+.error-label {
+    color: $error;
+    padding: 0 2;
+    height: 1;
+}
+
+.success-label {
+    color: $success;
+}
+
+ProgressBar Bar {
+    color: $accent;
+    background: $border;
+}
+
+Button {
+    border: solid $border;
+    background: transparent;
+    color: $text;
+    margin: 0 1;
+}
+
+Button:focus {
+    color: $accent;
+    border: solid $accent;
+}
+
+HelpScreen > ScrollableContainer {
+    border: solid $border;
+    padding: 1 2;
+    background: transparent;
+}
+
+#wizard-title {
+    color: $accent;
+    text-style: bold;
+    padding: 0 2;
+    border-bottom: solid $border;
+}
+
+#step-indicator {
+    color: $secondary;
+    padding: 0 2;
+    height: 1;
+}
+
+#step-prompt {
+    color: $text;
+    padding: 1 2 0 2;
+}
+
+#result-table {
+    color: $text;
+    padding: 1 2;
+}
+
+#status-msg {
+    color: $text;
+    padding: 1 2;
+}
+
+#elapsed-label {
+    color: $secondary;
+    padding: 0 2;
+}
+
+#cancel-hint {
+    color: $secondary;
+    padding: 0 2;
+}

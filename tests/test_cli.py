@@ -20,7 +20,7 @@ from pydf_tool.compress import (
 from pydf_tool.errors import PDFToolError
 from pydf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
 from pydf_tool.ocr import run_ocr
-from pydf_tool.tui import _dialog_width, _wrap_dialog_text
+from pydf_tool.tui import PyDFApp, run_interactive_app
 from pydf_tool.utils import ensure_pdf_input, resolve_user_path
 
 
@@ -131,20 +131,6 @@ class OCRHelpersTestCase(unittest.TestCase):
         result = resolve_ocr_output_path(Path("scan.pdf"), None)
         self.assertEqual(result, Path("scan.1.pdf"))
 
-
-class TUIHelpersTestCase(unittest.TestCase):
-    @patch("pydf_tool.tui.get_terminal_size", return_value=os.terminal_size((60, 24)))
-    def test_dialog_width_shrinks_with_terminal(self, _mock_terminal_size) -> None:
-        self.assertEqual(_dialog_width(72, minimum=44, margin=6), 54)
-
-    def test_wrap_dialog_text_wraps_bullets_with_indentation(self) -> None:
-        wrapped = _wrap_dialog_text(
-            ["- Compressione custom: scegli custom e inserisci un valore 1-100"],
-            width=24,
-        )
-
-        self.assertIn("- Compressione custom:", wrapped)
-        self.assertIn("\n  scegli custom", wrapped)
 
 
 class PathNormalizationTestCase(unittest.TestCase):
@@ -562,12 +548,10 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("--lang", stdout.getvalue())
         self.assertIn("--output", stdout.getvalue())
 
-    @patch("pydf_tool.tui._run_with_progress", side_effect=lambda title, runner: runner(lambda update: None))
-    @patch("pydf_tool.tui.run_ocr")
+    @patch("pydf_tool.cli.run_ocr")
     def test_dispatch_interactive_command_supports_direct_ocr_command(
         self,
         mock_run_ocr,
-        _mock_progress,
     ) -> None:
         mock_run_ocr.return_value = OCRResult(
             output_path=Path("scan.1.pdf"),
@@ -583,32 +567,24 @@ class CLITestCase(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         mock_run_ocr.assert_called_once_with(
-            input_path="scan.pdf",
+            input_path=Path("scan.pdf"),
             output_path="out.pdf",
             lang="it",
-            progress_callback=unittest.mock.ANY,
         )
 
-    @patch("pydf_tool.tui._show_home_menu", side_effect=["ocr_tool", "exit"])
-    @patch("pydf_tool.tui._show_ocr_submenu", return_value="ocr")
-    @patch("pydf_tool.tui._prompt_ocr_args", return_value=argparse.Namespace(input="scan.pdf", lang="it", output=None))
-    @patch("pydf_tool.tui._run_ocr_interactive", return_value=0)
-    def test_interactive_shell_runs_guided_ocr_flow(
-        self,
-        mock_run_ocr_interactive,
-        _mock_prompt_ocr_args,
-        _mock_show_ocr_submenu,
-        _mock_show_home_menu,
-    ) -> None:
+    @patch("pydf_tool.tui.PyDFApp.run")
+    def test_interactive_shell_runs_app(self, mock_run) -> None:
+        mock_run.return_value = None
         exit_code = _run_interactive_shell()
+        mock_run.assert_called_once()
         self.assertEqual(exit_code, 0)
-        mock_run_ocr_interactive.assert_called_once()
 
-    @patch("pydf_tool.tui._show_help_screen")
-    def test_dispatch_interactive_command_supports_help(self, mock_help) -> None:
-        exit_code = _dispatch_interactive_command("help")
+    def test_dispatch_interactive_command_supports_help(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = _dispatch_interactive_command("help")
         self.assertEqual(exit_code, 0)
-        mock_help.assert_called_once()
+        self.assertIn("pydf-tool", stdout.getvalue())
 
     def test_dispatch_interactive_command_supports_command_help(self) -> None:
         stdout = io.StringIO()

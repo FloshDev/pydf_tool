@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import argparse
 import shlex
+import threading
 from collections.abc import Callable
-from dataclasses import dataclass
-from shutil import get_terminal_size
-from textwrap import shorten, wrap
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from textual import work
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, ScrollableContainer
+from textual.reactive import reactive
+from textual.screen import ModalScreen, Screen
+from textual.widgets import Button, Input, Label, ListItem, ListView, ProgressBar, Static
 
 from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
@@ -19,1134 +27,499 @@ from .utils import (
     resolve_user_path,
 )
 
+# ── Costanti ──────────────────────────────────────────────────────────────────
+
 EXIT_COMMANDS = {"exit", "quit", ":q"}
-APP_NAME = "PyDF Tool"
-APP_TAGLINE = "strumenti PDF da terminale"
-APP_SUMMARY = "OCR di PDF scansionati, compressione, verifica testo ricercabile."
-MENU_TEXT_WIDTH = 34
-DETAIL_TEXT_WIDTH = 68
+
+_HEADER_TEXT = """\
+╠══ PyDF Tool ══╣   OCR  ·  compress  ·  check
+──────────────────────────────────────────────
+strumenti PDF da riga di comando · macOS"""
+
+_MENU_ITEMS: list[tuple[str, str, str]] = [
+    ("ocr",      "Esegui OCR",   "Converti un PDF scansionato in PDF ricercabile o testo."),
+    ("compress", "Comprimi PDF", "Riduci le dimensioni del file con Ghostscript."),
+    ("check",    "Verifica OCR", "Controlla se il PDF ha già testo estraibile."),
+]
+
+_PREVIEW_TEXTS: dict[str, str] = {
+    "ocr": (
+        "Usa Tesseract per estrarre il testo da PDF scansionati.\n"
+        "Output: PDF ricercabile o file .txt"
+    ),
+    "compress": (
+        "Usa Ghostscript per ridurre le dimensioni del file.\n"
+        "Preset: low · medium · high"
+    ),
+    "check": (
+        "Legge i metadati del PDF e stima se OCR è necessario.\n"
+        "Risultato immediato, nessuna elaborazione."
+    ),
+}
+
+_FOOTER_HOME = "↑↓ naviga   Invio conferma   H/F1 help   Q/Esc esci"
+_FOOTER_WIZARD = "Invio avanza   Esc torna indietro"
+
+_HELP_TEXT = """\
+Flussi supportati
+
+  · Verifica OCR: analizza se il PDF ha già testo ricercabile
+  · Esegui OCR: converti PDF scansionato in PDF ricercabile o TXT
+  · Comprimi PDF: preset low / medium / high
+
+Controlli
+
+  · ↑ / ↓  naviga nel menu
+  · Invio   apre l'azione selezionata
+  · H o F1  apre l'help
+  · Q o Esc esce dalla home
+  · Ctrl+C  annulla OCR o compressione in corso
+
+Suggerimenti
+
+  · Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo
+  · Esegui OCR in TXT: scegli formato TXT nel flusso guidato
+  · Se annulli una compressione, il file parziale viene rimosso
+
+─────────────────────────────────────────────────
+Invio · Esc · Q chiudono questa schermata"""
+
+_HELP_TEXT_PLAIN = """\
+PyDF Tool — strumenti PDF da riga di comando
+
+  pydf-tool ocr FILE [--lang LINGUA] [--format pdf|txt] [--output PATH]
+  pydf-tool compress FILE [--level low|medium|high] [--output PATH]
+  pydf-tool check FILE
+
+Usa 'pydf-tool COMANDO --help' per dettagli sul singolo comando."""
 
 
-@dataclass(frozen=True)
-class MenuAction:
-    key: str
-    title: str
-    summary: str
-    detail: str
-    example: str
+# ── HelpScreen ────────────────────────────────────────────────────────────────
 
-
-def _load_prompt_toolkit():
-    try:
-        from prompt_toolkit.application import Application
-        from prompt_toolkit.application.current import get_app
-        from prompt_toolkit.key_binding import KeyBindings
-        from prompt_toolkit.layout import HSplit, Layout, VSplit, Window
-        from prompt_toolkit.layout.containers import DynamicContainer
-        from prompt_toolkit.layout.controls import FormattedTextControl
-        from prompt_toolkit.layout.dimension import D
-        from prompt_toolkit.styles import Style
-        from prompt_toolkit.widgets import Dialog, Label, RadioList, TextArea
-    except ImportError as exc:
-        raise PDFToolError(
-            "Dipendenze TUI mancanti. Riesegui `pip install -e .` per installare "
-            "`prompt_toolkit` e `rich`."
-        ) from exc
-
-    return {
-        "Application": Application,
-        "D": D,
-        "Dialog": Dialog,
-        "DynamicContainer": DynamicContainer,
-        "KeyBindings": KeyBindings,
-        "Label": Label,
-        "HSplit": HSplit,
-        "Layout": Layout,
-        "RadioList": RadioList,
-        "TextArea": TextArea,
-        "VSplit": VSplit,
-        "Window": Window,
-        "FormattedTextControl": FormattedTextControl,
-        "Style": Style,
-        "get_app": get_app,
-    }
-
-
-def _load_rich():
-    try:
-        from rich.console import Console
-        from rich.panel import Panel
-        from rich.progress import (
-            BarColumn,
-            Progress,
-            SpinnerColumn,
-            TaskProgressColumn,
-            TextColumn,
-            TimeElapsedColumn,
-        )
-        from rich.table import Table
-        from rich.text import Text
-    except ImportError as exc:
-        raise PDFToolError(
-            "Dipendenze TUI mancanti. Riesegui `pip install -e .` per installare "
-            "`prompt_toolkit` e `rich`."
-        ) from exc
-
-    return {
-        "Console": Console,
-        "Panel": Panel,
-        "Progress": Progress,
-        "SpinnerColumn": SpinnerColumn,
-        "BarColumn": BarColumn,
-        "TaskProgressColumn": TaskProgressColumn,
-        "TextColumn": TextColumn,
-        "TimeElapsedColumn": TimeElapsedColumn,
-        "Table": Table,
-        "Text": Text,
-    }
-
-
-def _dialog_style():
-    Style = _load_prompt_toolkit()["Style"]
-    return Style.from_dict(
-        {
-            "selected": "fg:#E8B84B bold",
-            "dialog": "fg:#D4D4D4",
-            "frame.border": "fg:#3A3A3A",
-            "dialog frame.label": "fg:#E8B84B bold",
-            "dialog.body": "fg:#D4D4D4",
-            "dialog.body label": "fg:#D4D4D4",
-            "dialog.body text-area": "fg:#D4D4D4",
-            "dialog.body text-area.prompt": "fg:#7A7A7A",
-            "dialog.body text-area cursor": "reverse",
-            "dialog.body text-area last-line": "nounderline",
-            "dialog_hint": "fg:#7A7A7A",
-            "validation-toolbar": "fg:#D4D4D4",
-            "dialog shadow": "",
-            "button": "fg:#7A7A7A",
-            "button.arrow": "fg:#7A7A7A",
-            "button.focused": "fg:#E8B84B bold",
-            "button.focused.arrow": "fg:#E8B84B bold",
-            "radio": "fg:#7A7A7A",
-            "radio-selected": "fg:#E8B84B bold",
-        }
-    )
-
-
-def _console():
-    return _load_rich()["Console"](soft_wrap=True)
-
-
-def _fit_line(text: str, width: int) -> str:
-    single_line = " ".join(text.split())
-    clipped = shorten(single_line, width=width, placeholder="...")
-    return clipped.ljust(width)
-
-
-def _wrap_lines(text: str, width: int, max_lines: int) -> list[str]:
-    normalized = " ".join(text.split())
-    lines = wrap(
-        normalized,
-        width=max(12, width),
-        break_long_words=False,
-        break_on_hyphens=False,
-    )
-    if not lines:
-        return [""]
-    if len(lines) > max_lines:
-        tail = " ".join(lines[max_lines - 1 :])
-        lines = lines[: max_lines - 1] + [
-            shorten(tail, width=max(12, width), placeholder="...")
-        ]
-    return lines
-
-
-def _terminal_columns(default: int = 120) -> int:
-    try:
-        return get_terminal_size((default, 24)).columns
-    except OSError:
-        return default
-
-
-def _terminal_rows(default: int = 24) -> int:
-    try:
-        return get_terminal_size((120, default)).lines
-    except OSError:
-        return default
-
-
-def _dialog_width(preferred: int, minimum: int = 48, margin: int = 6) -> int:
-    columns = _terminal_columns()
-    return max(minimum, min(preferred, max(minimum, columns - margin)))
-
-
-def _wrap_dialog_text(lines: list[str], width: int) -> str:
-    wrapped: list[str] = []
-    for line in lines:
-        if not line:
-            wrapped.append("")
-            continue
-        if line.startswith("- "):
-            body = wrap(
-                line[2:],
-                width=max(20, width - 2),
-                initial_indent="- ",
-                subsequent_indent="  ",
-                break_long_words=False,
-                break_on_hyphens=False,
-            )
-            wrapped.extend(body or ["- "])
-            continue
-        wrapped.extend(
-            wrap(
-                line,
-                width=max(20, width),
-                break_long_words=False,
-                break_on_hyphens=False,
-            )
-            or [""]
-        )
-    return "\n".join(wrapped)
-
-
-def _home_actions() -> list[MenuAction]:
-    return [
-        MenuAction(
-            key="ocr_tool",
-            title="Strumento OCR",
-            summary="Verifica e conversione di PDF scansionati",
-            detail=(
-                "Verifica se il PDF ha gia testo ricercabile, "
-                "oppure avvia l'OCR per renderlo ricercabile o esportarlo in TXT."
-            ),
-            example="pydf-tool check doc.pdf  /  pydf-tool ocr doc.pdf --lang it",
-        ),
-        MenuAction(
-            key="compress",
-            title="Comprimi PDF",
-            summary="Preset, livello custom e modalita bianco e nero",
-            detail=(
-                "Usa Ghostscript con avanzamento live, delta dimensione e "
-                "conversione opzionale in bianco e nero."
-            ),
-            example="pydf-tool compress documento.pdf --level 80 --grayscale",
-        ),
-        MenuAction(
-            key="manual",
-            title="Comando libero",
-            summary="Incolla una riga di comando completa",
-            detail=(
-                "Utile se vuoi restare nella TUI ma scrivere il comando direttamente, "
-                "senza usare il wizard."
-            ),
-            example='ocr "input.pdf" --lang it --output "output.pdf"',
-        ),
-        MenuAction(
-            key="help",
-            title="Help",
-            summary="Scorciatoie, annullamento, esempi e flussi supportati",
-            detail="Mostra una vista dedicata con indicazioni operative e scorciatoie.",
-            example="Premi H dal menu principale.",
-        ),
-        MenuAction(
-            key="exit",
-            title="Esci",
-            summary="Chiude la sessione interattiva",
-            detail="Esce dalla TUI e torna alla shell di sistema.",
-            example="Premi Q oppure Esc.",
-        ),
+class HelpScreen(ModalScreen):
+    BINDINGS = [
+        Binding("escape", "dismiss_screen", "Chiudi"),
+        Binding("enter", "dismiss_screen", "Chiudi"),
+        Binding("q", "dismiss_screen", "Chiudi"),
     ]
 
+    def compose(self) -> ComposeResult:
+        yield ScrollableContainer(
+            Static(_HELP_TEXT, id="help-content"),
+            id="help-container",
+        )
 
-def _show_ocr_submenu() -> str | None:
-    """Sottomenu Strumento OCR. Ritorna 'check', 'ocr', o None se annullato."""
-    return _ask_choice(
-        "Strumento OCR",
-        "Cosa vuoi fare?",
-        [
-            ("check", "Verifica OCR · controlla se il PDF ha gia testo ricercabile"),
-            ("ocr", "Esegui OCR · converti PDF scansionato in PDF ricercabile o TXT"),
-        ],
-    )
+    def action_dismiss_screen(self) -> None:
+        self.dismiss()
 
 
-def _show_home_menu() -> str | None:
-    toolkit = _load_prompt_toolkit()
-    Application = toolkit["Application"]
-    DynamicContainer = toolkit["DynamicContainer"]
-    KeyBindings = toolkit["KeyBindings"]
-    HSplit = toolkit["HSplit"]
-    Layout = toolkit["Layout"]
-    VSplit = toolkit["VSplit"]
-    Window = toolkit["Window"]
-    FormattedTextControl = toolkit["FormattedTextControl"]
-    Style = toolkit["Style"]
-    get_app = toolkit["get_app"]
+# ── HomeScreen ────────────────────────────────────────────────────────────────
 
-    actions = _home_actions()
-    state = {"index": 0}
+class HomeScreen(Screen):
+    BINDINGS = [
+        Binding("q", "quit_app", "Esci"),
+        Binding("escape", "quit_app", "Esci"),
+        Binding("h", "push_help", "Help"),
+        Binding("f1", "push_help", "Help"),
+    ]
 
-    def _screen_metrics() -> tuple[int, int]:
+    def compose(self) -> ComposeResult:
+        yield Static(_HEADER_TEXT, id="header")
+        with Horizontal(id="body"):
+            yield ListView(
+                *[ListItem(Label(label), id=key) for key, label, _ in _MENU_ITEMS],
+                id="menu-list",
+            )
+            yield Static(_PREVIEW_TEXTS[_MENU_ITEMS[0][0]], id="preview-panel")
+        yield Static(_FOOTER_HOME, id="footer-bar")
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.item is not None and event.item.id in _PREVIEW_TEXTS:
+            self.query_one("#preview-panel", Static).update(_PREVIEW_TEXTS[event.item.id])
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.item is not None:
+            self._dispatch_action(event.item.id)
+
+    def _dispatch_action(self, action_id: str) -> None:
+        if action_id == "check":
+            self.app.push_screen(CheckInputScreen())
+        else:
+            self.app.push_screen(WizardScreen(mode=action_id))
+
+    def action_quit_app(self) -> None:
+        self.app.exit(0)
+
+    def action_push_help(self) -> None:
+        self.app.push_screen(HelpScreen())
+
+
+# ── WizardScreen (Phase 3) ────────────────────────────────────────────────────
+
+@dataclass
+class WizardStep:
+    name: str
+    prompt: str
+    placeholder: str
+    choices: list[str] | None = None
+
+
+_WIZARD_STEPS: dict[str, list[WizardStep]] = {
+    "ocr": [
+        WizardStep("File",    "Percorso del PDF da elaborare:",    "es. ~/Documents/doc.pdf"),
+        WizardStep("Lingua",  "Lingua del documento:",              "it / en / it+en", choices=["it", "en", "it+en"]),
+        WizardStep("Formato", "Formato output:",                    "pdf / txt",        choices=["pdf", "txt"]),
+        WizardStep("Output",  "Percorso file di output:",           "es. ~/Desktop/out.pdf (vuoto = automatico)"),
+    ],
+    "compress": [
+        WizardStep("File",    "Percorso del PDF da comprimere:",   "es. ~/Documents/doc.pdf"),
+        WizardStep("Livello", "Livello di compressione:",           "low / medium / high", choices=["low", "medium", "high"]),
+        WizardStep("Colore",  "Modalità colore:",                   "color / gray",         choices=["color", "gray"]),
+        WizardStep("Output",  "Percorso file di output:",           "es. ~/Desktop/out.pdf (vuoto = automatico)"),
+    ],
+}
+
+
+class WizardScreen(Screen):
+    BINDINGS = [
+        Binding("escape", "go_back", "Indietro"),
+    ]
+
+    current_step: reactive[int] = reactive(0)
+
+    def __init__(self, mode: str, prefill_path: str = "") -> None:
+        super().__init__()
+        self._mode = mode
+        self._steps = _WIZARD_STEPS[mode]
+        self._values: dict[str, str] = {}
+        self._prefill_path = prefill_path
+
+    def compose(self) -> ComposeResult:
+        title = "Esegui OCR" if self._mode == "ocr" else "Comprimi PDF"
+        yield Static("", id="step-indicator")
+        yield Static(title, id="wizard-title")
+        yield Static("", id="step-prompt")
+        yield Input(id="step-input")
+        yield Static("", id="step-error", classes="error-label")
+        yield Static(_FOOTER_WIZARD, id="footer-bar")
+
+    def on_mount(self) -> None:
+        self._render_step(0)
+        if self._prefill_path:
+            self.query_one("#step-input", Input).value = self._prefill_path
+
+    def watch_current_step(self, step: int) -> None:
+        self._render_step(step)
+
+    def _render_step(self, step: int) -> None:
+        steps = self._steps
+        parts = []
+        for i, s in enumerate(steps):
+            marker = "▶ " if i == step else "   "
+            parts.append(f"{marker}{i + 1}. {s.name}")
+        self.query_one("#step-indicator", Static).update("  ".join(parts))
+        self.query_one("#step-prompt", Static).update(steps[step].prompt)
+        inp = self.query_one("#step-input", Input)
+        inp.placeholder = steps[step].placeholder
+        inp.value = ""
+        inp.focus()
+        self.query_one("#step-error", Static).update("")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self._advance(event.value.strip())
+
+    def _advance(self, value: str) -> None:
+        step = self.current_step
+        s = self._steps[step]
+        err = self._validate(step, value, s)
+        if err:
+            self.query_one("#step-error", Static).update(err)
+            return
+        self._values[s.name.lower()] = value
+        if step + 1 < len(self._steps):
+            self.current_step = step + 1
+        else:
+            self._finish()
+
+    def _validate(self, step: int, value: str, s: WizardStep) -> str:
+        if step == 0:  # File
+            if not value:
+                return "Percorso obbligatorio."
+            try:
+                ensure_pdf_input(resolve_user_path(value))
+            except PDFToolError as e:
+                return str(e)
+        elif s.choices and value not in s.choices:
+            return f"Scegli tra: {' · '.join(s.choices)}"
+        return ""
+
+    def _finish(self) -> None:
+        args = self._build_args()
+        self.app.push_screen(ProgressScreen(mode=self._mode, args=args))
+
+    def _build_args(self) -> dict:
+        v = self._values
+        if self._mode == "ocr":
+            output_raw = v.get("output", "").strip()
+            fmt = v.get("formato", "pdf")
+            ext = ".txt" if fmt == "txt" else ".pdf"
+            in_path = resolve_user_path(v["file"])
+            if output_raw:
+                out_path = resolve_user_path(output_raw)
+                if not out_path.suffix:
+                    out_path = out_path.with_suffix(ext)
+            else:
+                out_path = resolve_incremental_output_path(in_path, ext)
+            return {
+                "input": in_path,
+                "lang": v.get("lingua", "it"),
+                "output": out_path,
+            }
+        else:  # compress
+            output_raw = v.get("output", "").strip()
+            in_path = resolve_user_path(v["file"])
+            if output_raw:
+                out_path = resolve_user_path(output_raw)
+                if not out_path.suffix:
+                    out_path = out_path.with_suffix(".pdf")
+            else:
+                out_path = resolve_incremental_output_path(in_path, ".pdf")
+            return {
+                "input": in_path,
+                "level": v.get("livello", "medium"),
+                "grayscale": v.get("colore", "color") == "gray",
+                "output": out_path,
+            }
+
+    def action_go_back(self) -> None:
+        if self.current_step > 0:
+            self.current_step -= 1
+        else:
+            self.app.pop_screen()
+
+
+# ── CheckInputScreen + CheckResultScreen (Phase 4) ────────────────────────────
+
+class CheckInputScreen(Screen):
+    BINDINGS = [Binding("escape", "go_back", "Annulla")]
+
+    def compose(self) -> ComposeResult:
+        yield Static("Verifica OCR", id="wizard-title")
+        yield Static("Percorso del PDF da verificare:", id="step-prompt")
+        yield Input(placeholder="es. ~/Documents/doc.pdf", id="check-input")
+        yield Static("", id="check-error", classes="error-label")
+        yield Static("Invio conferma   Esc annulla", id="footer-bar")
+
+    def on_mount(self) -> None:
+        self.query_one("#check-input", Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        path_str = event.value.strip()
+        if not path_str:
+            self.query_one("#check-error", Static).update("Percorso obbligatorio.")
+            return
         try:
-            size = get_app().output.get_size()
-            return size.columns, size.rows
-        except Exception:
-            return _terminal_columns(), _terminal_rows()
-
-    def _header_state() -> tuple[str, list[str]]:
-        columns, _ = _screen_metrics()
-        line_width = max(20, columns - 2)
-        tagline_width = max(0, line_width - len(APP_NAME) - 2)
-        tagline = ""
-        if tagline_width >= 10:
-            tagline = shorten(APP_TAGLINE, width=tagline_width, placeholder="...")
-        summary_lines = _wrap_lines(APP_SUMMARY, line_width, 2)
-        return tagline, summary_lines
-
-    def _layout_metrics() -> tuple[bool, int, int, int, bool, bool]:
-        columns, rows = _screen_metrics()
-        compact = rows < 26
-        show_detail = rows >= 22
-
-        if columns >= 110 and show_detail:
-            menu_width = min(40, max(32, columns // 3))
-            detail_width = max(28, columns - menu_width - 2)
-            return True, menu_width, detail_width, rows, compact, show_detail
-
-        stacked_width = max(28, columns - 4)
-        return False, stacked_width, stacked_width, rows, compact, show_detail
-
-    # ── box helpers ──────────────────────────────────────────────────────────
-
-    def _box_top(box_width: int, title: str, title_style: str) -> list[tuple[str, str]]:
-        fill = max(1, box_width - len(title) - 5)
-        return [
-            ("class:app_border", "┌─ "),
-            (title_style, title),
-            ("class:app_border", " " + "─" * fill + "┐\n"),
-        ]
-
-    def _box_bottom(box_width: int) -> list[tuple[str, str]]:
-        return [("class:app_border", "└" + "─" * (box_width - 2) + "┘\n")]
-
-    def _box_line(
-        box_width: int, content: list[tuple[str, str]]
-    ) -> list[tuple[str, str]]:
-        return [("class:app_border", "│ ")] + content + [("class:app_border", " │\n")]
-
-    def _box_blank(box_width: int) -> list[tuple[str, str]]:
-        return [("class:app_border", "│ " + " " * (box_width - 4) + " │\n")]
-
-    # ── header ───────────────────────────────────────────────────────────────
-
-    def _header_fragments():
-        columns, _ = _screen_metrics()
-        box_w = max(20, columns - 2)
-        inner_w = box_w - 4
-        tagline, summary_lines = _header_state()
-        frags: list[tuple[str, str]] = []
-        frags += _box_top(box_w, APP_NAME, "class:app_brand")
-        if tagline:
-            frags += _box_line(
-                box_w, [("class:app_tagline", tagline.ljust(inner_w)[:inner_w])]
-            )
-        for line in summary_lines:
-            frags += _box_line(
-                box_w, [("class:app_header", line.ljust(inner_w)[:inner_w])]
-            )
-        frags += _box_bottom(box_w)
-        return frags
-
-    def _header_window():
-        tagline, summary_lines = _header_state()
-        height = 2 + (1 if tagline else 0) + len(summary_lines)
-        return Window(
-            height=height,
-            content=FormattedTextControl(_header_fragments),
-            always_hide_cursor=True,
-        )
-
-    # ── menu ─────────────────────────────────────────────────────────────────
-
-    def _menu_fragments():
-        _, menu_width, _, _, compact, _ = _layout_metrics()
-        inner_w = max(4, menu_width - 4)
-        item_gap = not compact
-        frags: list[tuple[str, str]] = []
-        frags += _box_top(menu_width, "Azioni", "class:home_section")
-        for index, action in enumerate(actions):
-            selected = index == state["index"]
-            marker = "> " if selected else "  "
-            title_style = "class:home_title_active" if selected else "class:home_title"
-            summary_style = (
-                "class:home_summary_active" if selected else "class:home_summary"
-            )
-            marker_style = (
-                "class:home_marker_active" if selected else "class:home_marker"
-            )
-            frags += _box_line(
-                menu_width,
-                [
-                    (marker_style, marker),
-                    (title_style, _fit_line(action.title, inner_w - 2)),
-                ],
-            )
-            frags += _box_line(
-                menu_width,
-                [
-                    (summary_style, "  " + _fit_line(action.summary, inner_w - 2)),
-                ],
-            )
-            if item_gap and index < len(actions) - 1:
-                frags += _box_blank(menu_width)
-        frags += _box_bottom(menu_width)
-        return frags
-
-    # ── detail ────────────────────────────────────────────────────────────────
-
-    def _detail_fragments():
-        action = actions[state["index"]]
-        _, _, detail_width, _, compact, _ = _layout_metrics()
-        detail_lines_n = 2 if compact else 3
-        command_lines_n = 1 if compact else 2
-        inner_w = max(4, detail_width - 4)
-        frags: list[tuple[str, str]] = []
-        frags += _box_top(detail_width, "Anteprima", "class:detail_section")
-        frags += _box_blank(detail_width)
-        for line in _wrap_lines(action.title, inner_w, 1):
-            frags += _box_line(
-                detail_width, [("class:detail_heading", line.ljust(inner_w)[:inner_w])]
-            )
-        frags += _box_blank(detail_width)
-        for line in _wrap_lines(action.detail, inner_w, detail_lines_n):
-            frags += _box_line(
-                detail_width, [("class:detail_text", line.ljust(inner_w)[:inner_w])]
-            )
-        frags += _box_blank(detail_width)
-        frags += _box_line(
-            detail_width, [("class:detail_label", "Comando".ljust(inner_w)[:inner_w])]
-        )
-        for line in _wrap_lines(action.example, inner_w, command_lines_n):
-            frags += _box_line(
-                detail_width, [("class:detail_code", line.ljust(inner_w)[:inner_w])]
-            )
-        frags += _box_blank(detail_width)
-        frags += _box_bottom(detail_width)
-        return frags
-
-    # ── footer ────────────────────────────────────────────────────────────────
-
-    def _footer_fragments():
-        return [("class:app_footer", "↑↓ naviga  Invio apre  H help  Q/Esc esce")]
-
-    # ── key bindings ─────────────────────────────────────────────────────────
-
-    kb = KeyBindings()
-
-    @kb.add("up")
-    def _go_up(event) -> None:
-        state["index"] = (state["index"] - 1) % len(actions)
-
-    @kb.add("down")
-    def _go_down(event) -> None:
-        state["index"] = (state["index"] + 1) % len(actions)
-
-    @kb.add("enter")
-    def _select(event) -> None:
-        event.app.exit(result=actions[state["index"]].key)
-
-    @kb.add("q")
-    @kb.add("escape")
-    def _quit(event) -> None:
-        event.app.exit(result="exit")
-
-    @kb.add("h")
-    @kb.add("f1")
-    def _help(event) -> None:
-        event.app.exit(result="help")
-
-    # ── layout ───────────────────────────────────────────────────────────────
-
-    def _home_body():
-        wide, menu_width, _, _, _, show_detail = _layout_metrics()
-
-        menu_window = Window(
-            width=menu_width,
-            content=FormattedTextControl(_menu_fragments),
-            always_hide_cursor=True,
-        )
-
-        if not show_detail:
-            return menu_window
-
-        detail_window = Window(
-            content=FormattedTextControl(_detail_fragments),
-            always_hide_cursor=True,
-        )
-
-        if wide:
-            return VSplit([menu_window, Window(width=2), detail_window])
-
-        return HSplit([menu_window, Window(height=1), detail_window])
-
-    layout = Layout(
-        HSplit(
-            [
-                DynamicContainer(_header_window),
-                Window(height=1),
-                DynamicContainer(_home_body),
-                Window(height=1, char="─", style="class:app_divider"),
-                Window(
-                    height=1,
-                    content=FormattedTextControl(_footer_fragments),
-                    always_hide_cursor=True,
-                ),
-            ]
-        )
-    )
-
-    style = Style.from_dict(
-        {
-            "": "fg:#D4D4D4",
-            "app_brand": "fg:#E8B84B bold",
-            "app_tagline": "fg:#7A7A7A",
-            "app_header": "fg:#7A7A7A",
-            "app_border": "fg:#3A3A3A",
-            "app_divider": "fg:#3A3A3A",
-            "home_section": "fg:#E8B84B",
-            "home_marker": "",
-            "home_marker_active": "fg:#E8B84B bold",
-            "home_title": "fg:#D4D4D4",
-            "home_title_active": "fg:#E8B84B bold",
-            "home_summary": "fg:#7A7A7A",
-            "home_summary_active": "fg:#7A7A7A",
-            "detail_section": "fg:#E8B84B",
-            "detail_heading": "fg:#E8B84B bold",
-            "detail_text": "fg:#D4D4D4",
-            "detail_label": "fg:#7A7A7A",
-            "detail_code": "fg:#D4D4D4",
-            "app_footer": "fg:#7A7A7A",
-        }
-    )
-
-    return Application(
-        layout=layout,
-        key_bindings=kb,
-        style=style,
-        full_screen=True,
-    ).run()
-
-
-def _show_help_screen() -> None:
-    toolkit = _load_prompt_toolkit()
-    Application = toolkit["Application"]
-    D = toolkit["D"]
-    Dialog = toolkit["Dialog"]
-    HSplit = toolkit["HSplit"]
-    KeyBindings = toolkit["KeyBindings"]
-    Label = toolkit["Label"]
-    Layout = toolkit["Layout"]
-    dialog_width = _dialog_width(90, minimum=56)
-    help_text = _wrap_dialog_text(
-        [
-            "Flussi supportati",
-            "",
-            "- Strumento OCR > Verifica OCR: analizza se il PDF ha gia testo ricercabile",
-            "- Strumento OCR > Esegui OCR: converti PDF scansionato in PDF o TXT",
-            "- Comprimi PDF: preset low / medium / high o livello numerico 1-100",
-            "- Comprimi PDF in bianco e nero: opzionale, non attiva di default",
-            "- Comando libero: incolla una riga come `ocr file.pdf --lang it`",
-            "",
-            "Controlli",
-            "",
-            "- Frecce su/giu: naviga nel menu",
-            "- Invio: apre l'azione selezionata",
-            "- H o F1: apre l'help",
-            "- Q o Esc: esce dalla home",
-            "- Ctrl+C durante OCR o compressione: annulla l'operazione",
-            "",
-            "Suggerimenti",
-            "",
-            "- Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo",
-            "- Esegui OCR in TXT: scegli formato TXT nel flusso guidato",
-            "- Comprimi PDF custom: scegli `custom` e inserisci un valore 1-100",
-            "- Salvataggio custom: scegli prima la cartella e poi il nome file",
-            "- Se annulli una compressione, il file parziale viene rimosso.",
-        ],
-        width=max(32, dialog_width - 8),
-    )
-    dialog = Dialog(
-        title=f"{APP_NAME} help",
-        body=HSplit(
-            [
-                Label(text=help_text),
-                Label(
-                    text="Invio o Esc chiudono questa schermata.",
-                    style="class:dialog_hint",
-                ),
-            ],
-            padding=1,
-        ),
-        buttons=[],
-        with_background=True,
-        width=D(preferred=dialog_width),
-    )
-    kb = KeyBindings()
-
-    @kb.add("enter")
-    @kb.add("escape")
-    @kb.add("q")
-    def _close(event) -> None:
-        event.app.exit(result=None)
-
-    Application(
-        layout=Layout(dialog.container),
-        key_bindings=kb,
-        style=_dialog_style(),
-        full_screen=True,
-        mouse_support=True,
-    ).run()
-
-
-def _show_info_dialog(title: str, text: str) -> None:
-    toolkit = _load_prompt_toolkit()
-    Application = toolkit["Application"]
-    D = toolkit["D"]
-    Dialog = toolkit["Dialog"]
-    HSplit = toolkit["HSplit"]
-    KeyBindings = toolkit["KeyBindings"]
-    Label = toolkit["Label"]
-    Layout = toolkit["Layout"]
-    dialog_width = _dialog_width(72, minimum=44)
-    dialog = Dialog(
-        title=title,
-        body=HSplit(
-            [
-                Label(text=text),
-                Label(
-                    text="Invio o Esc chiudono questa schermata.",
-                    style="class:dialog_hint",
-                ),
-            ],
-            padding=1,
-        ),
-        buttons=[],
-        with_background=True,
-        width=D(preferred=dialog_width),
-    )
-    kb = KeyBindings()
-
-    @kb.add("enter")
-    @kb.add("escape")
-    @kb.add("q")
-    def _close(event) -> None:
-        event.app.exit(result=None)
-
-    Application(
-        layout=Layout(dialog.container),
-        key_bindings=kb,
-        style=_dialog_style(),
-        full_screen=True,
-        mouse_support=True,
-    ).run()
-
-
-def _ask_text(title: str, text: str, default: str = "") -> str | None:
-    toolkit = _load_prompt_toolkit()
-    Application = toolkit["Application"]
-    D = toolkit["D"]
-    Dialog = toolkit["Dialog"]
-    HSplit = toolkit["HSplit"]
-    KeyBindings = toolkit["KeyBindings"]
-    Label = toolkit["Label"]
-    Layout = toolkit["Layout"]
-    TextArea = toolkit["TextArea"]
-
-    textfield = TextArea(
-        text=default,
-        multiline=False,
-        focus_on_click=True,
-    )
-    dialog_width = _dialog_width(72, minimum=44)
-    dialog = Dialog(
-        title=title,
-        body=HSplit(
-            [
-                Label(text=text),
-                textfield,
-                Label(
-                    text="Invio conferma  Esc annulla",
-                    style="class:dialog_hint",
-                ),
-            ],
-            padding=1,
-        ),
-        buttons=[],
-        with_background=True,
-        width=D(preferred=dialog_width),
-    )
-    kb = KeyBindings()
-
-    @kb.add("enter")
-    def _confirm(event) -> None:
-        event.app.exit(result=textfield.text)
-
-    @kb.add("escape")
-    @kb.add("c-c")
-    def _cancel(event) -> None:
-        event.app.exit(result=None)
-
-    result = Application(
-        layout=Layout(dialog.container, focused_element=textfield),
-        key_bindings=kb,
-        style=_dialog_style(),
-        full_screen=True,
-        mouse_support=True,
-    ).run()
-    if isinstance(result, str):
-        result = result.strip()
-    return result
-
-
-def _ask_choice(title: str, text: str, values: list[tuple[str, str]]) -> str | None:
-    toolkit = _load_prompt_toolkit()
-    Application = toolkit["Application"]
-    D = toolkit["D"]
-    Dialog = toolkit["Dialog"]
-    HSplit = toolkit["HSplit"]
-    KeyBindings = toolkit["KeyBindings"]
-    Label = toolkit["Label"]
-    Layout = toolkit["Layout"]
-    RadioList = toolkit["RadioList"]
-
-    radio_list = RadioList(values=values)
-    dialog_width = _dialog_width(72, minimum=44)
-    dialog = Dialog(
-        title=title,
-        body=HSplit(
-            [
-                Label(text=text),
-                radio_list,
-                Label(
-                    text="Frecce navigano  Invio o click confermano  Esc annulla",
-                    style="class:dialog_hint",
-                ),
-            ],
-            padding=1,
-        ),
-        buttons=[],
-        with_background=True,
-        width=D(preferred=dialog_width),
-    )
-    kb = KeyBindings()
-
-    @kb.add("enter", eager=True)
-    def _confirm(event) -> None:
-        event.app.exit(result=radio_list.values[radio_list._selected_index][0])
-
-    @kb.add("escape")
-    @kb.add("c-c")
-    def _cancel(event) -> None:
-        event.app.exit(result=None)
-
-    return Application(
-        layout=Layout(dialog.container, focused_element=radio_list),
-        key_bindings=kb,
-        style=_dialog_style(),
-        full_screen=True,
-        mouse_support=True,
-    ).run()
-
-
-def _prompt_output_path(
-    title: str,
-    input_path: str,
-    default_extension: str,
-) -> str | None:
-    source_path = resolve_user_path(input_path)
-    suggested_path = resolve_incremental_output_path(source_path, default_extension)
-    save_mode = _ask_choice(
-        title,
-        "Salvataggio output",
-        [
-            (
-                "default",
-                f"Default · stessa cartella ({suggested_path.name})",
-            ),
-            (
-                "custom",
-                "Personalizzato · scegli cartella e nome file",
-            ),
-        ],
-    )
-    if not save_mode:
-        return None
-    if save_mode == "default":
-        return str(suggested_path)
-
-    destination_dir = _ask_text(
-        title,
-        "Cartella di destinazione",
-        default=str(source_path.parent),
-    )
-    if destination_dir is None:
-        return None
-    destination_dir = destination_dir.strip() or str(source_path.parent)
-
-    default_name = source_path.with_suffix(default_extension).name
-    file_name = _ask_text(
-        title,
-        "Nome del file",
-        default=default_name,
-    )
-    if file_name is None or not file_name.strip():
-        return None
-
-    output_path = resolve_user_path(destination_dir) / file_name.strip()
-    if not output_path.suffix:
-        output_path = output_path.with_suffix(default_extension)
-    return str(output_path)
-
-
-def _prompt_ocr_args(input_path_default: str = "") -> argparse.Namespace | None:
-    input_path = _ask_text(
-        "Esegui OCR", "Percorso del PDF di input", default=input_path_default
-    )
-    if not input_path:
-        return None
-    input_path = _clean_path_input(input_path)
-    if not input_path:
-        return None
-    try:
-        ensure_pdf_input(resolve_user_path(input_path))
-    except PDFToolError as exc:
-        _show_info_dialog("Esegui OCR", f"Percorso non valido:\n\n{exc}")
-        return None
-
-    lang = _ask_choice(
-        "Esegui OCR",
-        "Lingua OCR",
-        [
-            ("it", "Italiano"),
-            ("en", "English"),
-            ("it+en", "Italiano + English"),
-        ],
-    )
-    if not lang:
-        return None
-
-    output_format = _ask_choice(
-        "Esegui OCR",
-        "Formato di output",
-        [
-            ("pdf", "PDF ricercabile"),
-            ("txt", "TXT"),
-        ],
-    )
-    if not output_format:
-        return None
-
-    output = _prompt_output_path(
-        "Esegui OCR",
-        input_path,
-        ".txt" if output_format == "txt" else ".pdf",
-    )
-    if output is None:
-        return None
-
-    return argparse.Namespace(input=input_path, lang=lang, output=output)
-
-
-def _prompt_compress_args() -> argparse.Namespace | None:
-    input_path = _ask_text("Comprimi PDF", "Percorso del PDF di input")
-    if not input_path:
-        return None
-    input_path = _clean_path_input(input_path)
-    if not input_path:
-        return None
-    try:
-        ensure_pdf_input(resolve_user_path(input_path))
-    except PDFToolError as exc:
-        _show_info_dialog("Comprimi PDF", f"Percorso non valido:\n\n{exc}")
-        return None
-
-    level = _ask_choice(
-        "Comprimi PDF",
-        "Livello di compressione",
-        [
-            ("low", "low · compressione leggera"),
-            ("medium", "medium · bilanciato"),
-            ("high", "high · compressione aggressiva"),
-            ("custom", "custom · inserisci valore 1-100"),
-        ],
-    )
-    if not level:
-        return None
-    if level == "custom":
-        custom_level = _ask_text(
-            "Comprimi PDF",
-            "Valore custom tra 1 e 100",
-        )
-        if not custom_level:
-            return None
-        level = custom_level
-
-    color_mode = _ask_choice(
-        "Comprimi PDF",
-        "Modalita colore",
-        [
-            ("color", "A colori"),
-            ("grayscale", "Bianco e nero"),
-        ],
-    )
-    if not color_mode:
-        return None
-
-    output = _prompt_output_path("Comprimi PDF", input_path, ".pdf")
-    if output is None:
-        return None
-
-    return argparse.Namespace(
-        input=input_path,
-        level=level,
-        output=output,
-        grayscale=color_mode == "grayscale",
-    )
-
-
-def _prompt_check_args() -> argparse.Namespace | None:
-    input_path = _ask_text("Verifica OCR", "Percorso del PDF da analizzare")
-    if not input_path:
-        return None
-    input_path = _clean_path_input(input_path)
-    if not input_path:
-        return None
-    try:
-        ensure_pdf_input(resolve_user_path(input_path))
-    except PDFToolError as exc:
-        _show_info_dialog("Verifica OCR", f"Percorso non valido:\n\n{exc}")
-        return None
-    return argparse.Namespace(input=input_path)
-
-
-def _show_check_result(result: CheckOCRResult, input_path: str) -> str | None:
-    verdetti = {
-        "ocr_needed": "OCR necessario — nessuna pagina ha testo ricercabile.",
-        "already_searchable": "Gia ricercabile — OCR non necessario.",
-        "mixed": (
-            f"Misto — {result.pages_without_text} pagine su "
-            f"{result.pages_total} senza testo ricercabile."
-        ),
-    }
-    verdict_text = verdetti[result.verdict]
-    col_w = 22
-    lines = [
-        f"{'Pagine totali':<{col_w}}{result.pages_total}",
-        f"{'Pagine con testo':<{col_w}}{result.pages_with_text}",
-        f"{'Pagine senza testo':<{col_w}}{result.pages_without_text}",
-        f"{'Media caratteri/pag.':<{col_w}}{result.chars_per_page_avg:.0f}",
-        "",
-        f"Verdetto: {verdict_text}",
+            path = resolve_user_path(path_str)
+            ensure_pdf_input(path)
+        except PDFToolError as e:
+            self.query_one("#check-error", Static).update(str(e))
+            return
+        try:
+            result = check_ocr(path)
+        except PDFToolError as e:
+            self.query_one("#check-error", Static).update(str(e))
+            return
+        self.app.push_screen(CheckResultScreen(result=result, input_path=path))
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+
+def _verdict_label(verdict: str) -> str:
+    return {
+        "ocr_needed": "OCR necessario",
+        "already_searchable": "Già ricercabile",
+        "mixed": "Parzialmente ricercabile",
+    }.get(verdict, verdict)
+
+
+class CheckResultScreen(Screen):
+    BINDINGS = [
+        Binding("escape", "go_home", "Menu"),
+        Binding("enter", "default_action", "Continua"),
     ]
-    body_text = "\n".join(lines)
 
-    if result.verdict in {"ocr_needed", "mixed"}:
-        return _ask_choice(
-            "Verifica OCR — risultato",
-            body_text,
-            [
-                ("ocr", "Esegui OCR su questo file"),
-                ("no", "Torna al menu"),
-            ],
+    def __init__(self, result: CheckOCRResult, input_path: Path) -> None:
+        super().__init__()
+        self._result = result
+        self._input_path = input_path
+
+    def compose(self) -> ComposeResult:
+        r = self._result
+        table = (
+            f"Pagine totali          {r.pages_total}\n"
+            f"Pagine con testo       {r.pages_with_text}\n"
+            f"Pagine senza testo     {r.pages_without_text}\n"
+            f"Media caratteri/pag.   {r.chars_per_page_avg:.0f}\n\n"
+            f"Verdetto: {_verdict_label(r.verdict)}"
         )
-    _show_info_dialog("Verifica OCR — risultato", body_text)
-    return None
+        yield Static("Verifica OCR — risultato", id="header")
+        yield Static(table, id="result-table")
+        if r.verdict in ("ocr_needed", "mixed"):
+            yield Button("Esegui OCR su questo file", id="btn-run-ocr")
+        yield Button("Torna al menu", id="btn-home")
+        yield Static("Invio · Esc torna al menu", id="footer-bar")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-run-ocr":
+            self._launch_ocr()
+        else:
+            self._go_home()
+
+    def action_default_action(self) -> None:
+        if self._result.verdict in ("ocr_needed", "mixed"):
+            self._launch_ocr()
+        else:
+            self._go_home()
+
+    def action_go_home(self) -> None:
+        self._go_home()
+
+    def _launch_ocr(self) -> None:
+        self.app.pop_screen()  # pop CheckResultScreen
+        self.app.pop_screen()  # pop CheckInputScreen
+        self.app.push_screen(WizardScreen(mode="ocr", prefill_path=str(self._input_path)))
+
+    def _go_home(self) -> None:
+        self.app.pop_screen()  # pop CheckResultScreen
+        self.app.pop_screen()  # pop CheckInputScreen
 
 
-def _run_check_interactive(args: argparse.Namespace) -> int:
-    try:
-        result = check_ocr(args.input)
-    except PDFToolError as exc:
-        _show_error(str(exc))
-        return 1
+# ── ProgressScreen (Phase 5) ──────────────────────────────────────────────────
 
-    action = _show_check_result(result, str(args.input))
-    if action == "ocr":
-        ocr_args = _prompt_ocr_args(input_path_default=str(args.input))
-        if ocr_args is not None:
-            return _run_ocr_interactive(ocr_args)
+class ProgressScreen(Screen):
+    BINDINGS = [
+        Binding("ctrl+c", "cancel_op", "Annulla"),
+    ]
+
+    def __init__(self, mode: str, args: dict) -> None:
+        super().__init__()
+        self._mode = mode
+        self._args = args
+        self._cancel_event = threading.Event()
+        self._result_ready = False
+
+    def compose(self) -> ComposeResult:
+        title = "Esegui OCR" if self._mode == "ocr" else "Comprimi PDF"
+        yield Static(f"PyDF Tool — {title}", id="header")
+        yield Static("Avvio in corso...", id="status-msg")
+        yield ProgressBar(total=100, id="progress-bar", show_eta=False)
+        yield Static("", id="elapsed-label")
+        yield Static("Ctrl+C per annullare", id="cancel-hint")
+        yield Static("", id="footer-bar")
+
+    def on_mount(self) -> None:
+        self._run_operation()
+
+    @work(thread=True)
+    def _run_operation(self) -> None:
+        def progress_cb(p: OperationProgress) -> None:
+            if self._cancel_event.is_set():
+                raise KeyboardInterrupt
+            self.app.call_from_thread(self._on_progress, p)
+
+        try:
+            if self._mode == "ocr":
+                result = run_ocr(
+                    input_path=self._args["input"],
+                    lang=self._args["lang"],
+                    output_path=self._args["output"],
+                    progress_callback=progress_cb,
+                )
+                self.app.call_from_thread(self._on_success_ocr, result)
+            else:
+                result = compress_pdf(
+                    input_path=self._args["input"],
+                    level=self._args["level"],
+                    grayscale=self._args["grayscale"],
+                    output_path=self._args["output"],
+                    progress_callback=progress_cb,
+                )
+                self.app.call_from_thread(self._on_success_compress, result)
+        except KeyboardInterrupt:
+            self.app.call_from_thread(self._on_cancelled)
+        except PDFToolError as e:
+            self.app.call_from_thread(self._on_error, str(e))
+
+    def _on_progress(self, p: OperationProgress) -> None:
+        self.query_one("#status-msg", Static).update(p.message)
+        if p.total:
+            bar = self.query_one("#progress-bar", ProgressBar)
+            bar.update(total=p.total, progress=p.completed)
+
+    def _on_success_ocr(self, result: OCRResult) -> None:
+        self._show_result(
+            f"OCR completato\n\nOutput: {result.output_path}\nPagine: {result.pages}",
+            success=True,
+        )
+
+    def _on_success_compress(self, result: CompressionResult) -> None:
+        change = format_size_change(result.size_before, result.size_after)
+        self._show_result(
+            f"Compressione completata\n\nOutput: {result.output_path}\nRiduzione: {change}",
+            success=True,
+        )
+
+    def _on_error(self, message: str) -> None:
+        self._show_result(f"Errore: {message}", success=False)
+
+    def _on_cancelled(self) -> None:
+        self._show_result("Operazione annullata.", cancelled=True)
+
+    def _show_result(self, text: str, success: bool = False, cancelled: bool = False) -> None:
+        self.query_one("#progress-bar", ProgressBar).display = False
+        self.query_one("#cancel-hint", Static).display = False
+        self.query_one("#status-msg", Static).update(text)
+        self.query_one("#footer-bar", Static).update("Invio per tornare al menu")
+        self._result_ready = True
+
+    def on_key(self, event) -> None:
+        if self._result_ready and event.key in ("enter", "escape"):
+            self.app.pop_screen()
+
+    def action_cancel_op(self) -> None:
+        self._cancel_event.set()
+
+
+# ── PyDFApp ───────────────────────────────────────────────────────────────────
+
+class PyDFApp(App):
+    CSS_PATH = "tui.tcss"
+
+    def __init__(
+        self,
+        parser_factory: Callable[[], argparse.ArgumentParser],
+        executor: Callable[[argparse.Namespace], int],
+    ) -> None:
+        super().__init__()
+        self._parser_factory = parser_factory
+        self._executor = executor
+
+    def on_mount(self) -> None:
+        self.push_screen(HomeScreen())
+
+
+# ── Entry points pubblici ─────────────────────────────────────────────────────
+
+def run_interactive_app(
+    *,
+    parser_factory: Callable[[], argparse.ArgumentParser],
+    executor: Callable[[argparse.Namespace], int],
+) -> int:
+    """Entry point TUI. Firma invariata — cli.py non cambia."""
+    app = PyDFApp(parser_factory=parser_factory, executor=executor)
+    app.run()
     return 0
-
-
-def _clean_path_input(path: str) -> str:
-    """Rimuove whitespace e virgolette circostanti da un path incollato nella TUI."""
-    path = path.strip()
-    if len(path) >= 2 and path[0] in ('"', "'") and path[-1] == path[0]:
-        path = path[1:-1].strip()
-    return path
-
-
-def _prompt_manual_command() -> str | None:
-    return _ask_text(
-        "Comando libero",
-        "Scrivi un comando `ocr ...` o `compress ...`",
-    )
-
-
-def _pause(message: str = "Premi Invio per tornare al menu") -> None:
-    try:
-        _console().input(f"[bold]{message}.[/]")
-    except EOFError:
-        pass
-
-
-def _show_error(message: str) -> None:
-    rich = _load_rich()
-    Panel = rich["Panel"]
-    console = _console()
-    console.print(
-        Panel(
-            f"[#E85B4B]{message}[/]",
-            title="[bold #E85B4B]Errore[/]",
-            border_style="#E85B4B",
-        )
-    )
-    _pause()
-
-
-def _run_with_progress(
-    title: str,
-    runner: Callable[[Callable[[OperationProgress], None]], object],
-):
-    rich = _load_rich()
-    Console = rich["Console"]
-    Panel = rich["Panel"]
-    Progress = rich["Progress"]
-    SpinnerColumn = rich["SpinnerColumn"]
-    BarColumn = rich["BarColumn"]
-    TaskProgressColumn = rich["TaskProgressColumn"]
-    TextColumn = rich["TextColumn"]
-    TimeElapsedColumn = rich["TimeElapsedColumn"]
-    Table = rich["Table"]
-    Text = rich["Text"]
-
-    console = Console()
-    console.clear()
-    console.print(
-        Panel(
-            Text(
-                title + "\nPremi Ctrl+C per annullare l'operazione.",
-                justify="left",
-                style="#D4D4D4",
-            ),
-            title=f"[bold #E8B84B]{APP_NAME}[/]",
-            border_style="#3A3A3A",
-            padding=(0, 1),
-        )
-    )
-
-    progress = Progress(
-        SpinnerColumn(style="#E8B84B"),
-        TextColumn("[progress.description]{task.description}", style="#D4D4D4"),
-        BarColumn(bar_width=None, complete_style="#E8B84B", finished_style="#E8B84B"),
-        TaskProgressColumn(style="#7A7A7A"),
-        TimeElapsedColumn(style="#7A7A7A"),
-        console=console,
-        expand=True,
-    )
-    task_id = progress.add_task("Avvio operazione", total=None)
-
-    def _on_progress(update: OperationProgress) -> None:
-        progress.update(
-            task_id,
-            description=update.message,
-            total=update.total,
-            completed=update.completed,
-        )
-
-    try:
-        with progress:
-            result = runner(_on_progress)
-    except PDFToolError as exc:
-        console.print(
-            Panel(
-                f"[#E85B4B]{exc}[/]",
-                title="[bold #E85B4B]Errore[/]",
-                border_style="#E85B4B",
-            )
-        )
-        _pause()
-        return None
-    except KeyboardInterrupt:
-        console.print(
-            Panel(
-                "[#7A7A7A]Operazione annullata dall'utente.[/]",
-                title="[#7A7A7A]Operazione annullata[/]",
-                border_style="#3A3A3A",
-            )
-        )
-        _pause()
-        return None
-
-    table = Table.grid(padding=(0, 1))
-    if isinstance(result, OCRResult):
-        output_label = "PDF ricercabile" if result.output_type == "pdf" else "TXT"
-        table.add_row("Output", str(result.output_path))
-        table.add_row("Tipo", output_label)
-        table.add_row("Pagine", str(result.pages))
-        success_title = "OCR completato"
-    elif isinstance(result, CompressionResult):
-        table.add_row("Output", str(result.output_path))
-        table.add_row("Livello", result.level)
-        table.add_row(
-            "Modalita",
-            "Bianco e nero" if result.grayscale else "A colori",
-        )
-        table.add_row(
-            "Dimensioni",
-            format_size_change(result.size_before, result.size_after),
-        )
-        success_title = "Compressione completata"
-    else:
-        table.add_row("Esito", str(result))
-        success_title = "Operazione completata"
-
-    console.print(
-        Panel(
-            table,
-            title=f"[bold #4BE87A]{success_title}[/]",
-            border_style="#4BE87A",
-        )
-    )
-    _pause()
-    return result
-
-
-def _run_ocr_interactive(args: argparse.Namespace) -> int:
-    result = _run_with_progress(
-        "Esegui OCR",
-        lambda progress_callback: run_ocr(
-            input_path=args.input,
-            output_path=args.output,
-            lang=args.lang,
-            progress_callback=progress_callback,
-        ),
-    )
-    return 0 if result is not None else 1
-
-
-def _run_compress_interactive(args: argparse.Namespace) -> int:
-    result = _run_with_progress(
-        "Comprimi PDF",
-        lambda progress_callback: compress_pdf(
-            input_path=args.input,
-            output_path=args.output,
-            level=args.level,
-            grayscale=getattr(args, "grayscale", False),
-            progress_callback=progress_callback,
-        ),
-    )
-    return 0 if result is not None else 1
 
 
 def dispatch_interactive_command(
@@ -1155,11 +528,15 @@ def dispatch_interactive_command(
     parser_factory: Callable[[], argparse.ArgumentParser],
     executor: Callable[[argparse.Namespace], int],
 ) -> int:
-    if not command_line.strip():
+    """Esegue un comando CLI testuale (es. 'ocr file.pdf --lang it').
+    Firma invariata — cli.py non cambia.
+    """
+    stripped = command_line.strip()
+    if not stripped:
         return 0
 
     try:
-        tokens = shlex.split(command_line)
+        tokens = shlex.split(stripped)
     except ValueError as exc:
         raise PDFToolError(f"Sintassi del comando non valida: {exc}") from exc
 
@@ -1170,84 +547,29 @@ def dispatch_interactive_command(
 
     if command in EXIT_COMMANDS:
         return -1
-    if command == "help" and len(tokens) == 1:
-        _show_help_screen()
+
+    if command == "help":
+        if len(tokens) == 1:
+            print(_HELP_TEXT_PLAIN)
+            return 0
+        # "help ocr" / "help compress" / "help check" → argparse --help
+        sub_tokens = tokens[1:] + ["--help"]
+        parser = parser_factory()
+        try:
+            parser.parse_args(sub_tokens)
+        except SystemExit:
+            return 0
         return 0
+
     if command == "interactive":
         return 0
-    if command == "check" and len(tokens) == 1:
-        args = _prompt_check_args()
-        return 0 if args is None else _run_check_interactive(args)
-    if command == "ocr" and len(tokens) == 1:
-        args = _prompt_ocr_args()
-        return 0 if args is None else _run_ocr_interactive(args)
-    if command == "compress" and len(tokens) == 1:
-        args = _prompt_compress_args()
-        return 0 if args is None else _run_compress_interactive(args)
 
     parser = parser_factory()
     try:
-        args = parser.parse_args(tokens)
+        ns = parser.parse_args(tokens)
     except SystemExit as exc:
         raise PDFToolError(
             "Comando non valido. Usa il menu guidato oppure apri Help."
         ) from exc
 
-    if args.command == "check":
-        return _run_check_interactive(args)
-    if args.command == "ocr":
-        return _run_ocr_interactive(args)
-    if args.command == "compress":
-        return _run_compress_interactive(args)
-    if args.command == "interactive":
-        return 0
-    return executor(args)
-
-
-def run_interactive_app(
-    *,
-    parser_factory: Callable[[], argparse.ArgumentParser],
-    executor: Callable[[argparse.Namespace], int],
-) -> int:
-    while True:
-        try:
-            action = _show_home_menu()
-        except PDFToolError as exc:
-            _show_error(str(exc))
-            continue
-        if action in {None, "exit"}:
-            return 0
-        if action == "help":
-            _show_help_screen()
-            continue
-        if action == "ocr_tool":
-            sub = _show_ocr_submenu()
-            if sub == "check":
-                args = _prompt_check_args()
-                if args is not None:
-                    _run_check_interactive(args)
-            elif sub == "ocr":
-                args = _prompt_ocr_args()
-                if args is not None:
-                    _run_ocr_interactive(args)
-            continue
-        if action == "compress":
-            args = _prompt_compress_args()
-            if args is not None:
-                _run_compress_interactive(args)
-            continue
-        if action == "manual":
-            command = _prompt_manual_command()
-            if command:
-                try:
-                    result = dispatch_interactive_command(
-                        command,
-                        parser_factory=parser_factory,
-                        executor=executor,
-                    )
-                except PDFToolError as exc:
-                    _show_error(str(exc))
-                    continue
-                if result == -1:
-                    return 0
-            continue
+    return executor(ns)
