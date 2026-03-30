@@ -25,6 +25,20 @@ pip-wheel-metadata/
 .coverage.*
 htmlcov/
 
+# Local test and scratch material
+tests/local/
+tests/manual/
+tests/tmp/
+scratch/
+tmp/
+
+# Local AI / planning artifacts
+.claude/
+.superpowers/
+
+# Manual sample files
+PDF Sample/
+
 # Editors
 .vscode/
 .idea/
