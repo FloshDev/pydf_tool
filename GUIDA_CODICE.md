@@ -24,7 +24,7 @@ Quasi tutti i progetti Python amatoriali mettono il codice direttamente nella ro
 
 Un virtual environment è una copia isolata di Python con le sue librerie. Serve per non inquinare l'installazione globale di Python sul tuo Mac. `setup.sh` lo crea e lo configura. Regola pratica: se il comando `pydf-tool` non si trova, la venv probabilmente non è attiva — esegui `source .venv/bin/activate`.
 
-C'è una nota critica nel `PROJECT_CONTEXT.md` su un bug specifico del Python.org Python 3.12 su macOS che impedisce ai `.pth` file (usati per trovare i pacchetti) di funzionare correttamente. La soluzione adottata è un workaround in `setup.sh` che inietta direttamente il path di `src/` nello script wrapper. Non è elegante, ma è il modo più robusto per aggirare il problema senza dipendere da meccanismi che macOS può sabotare.
+C'è una nota critica nel `PROJECT_CONTEXT.md` su un bug specifico del Python.org Python 3.12 su macOS che impedisce ai `.pth` file (usati per trovare i pacchetti) di funzionare correttamente. La soluzione adottata è un workaround in `setup.sh` che fa tre cose pratiche: rimuove il flag `UF_HIDDEN` dalla venv, inietta `PYTHONPATH=src` nello script `activate` e patcha il wrapper `pydf-tool` con `sys.path.insert(0, src)`. Non è elegante, ma è il modo più robusto per aggirare il problema senza dipendere da meccanismi che macOS può sabotare.
 
 ---
 
@@ -226,19 +226,29 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 ---
 
-## 10. Il file `tui.py` — Perché due framework
+## 10. Il file `tui.py` — La TUI Textual
 
-La TUI usa due librerie diverse per due scopi diversi, il che crea una certa complessità strutturale (registrata come Issue #3 nel `PROJECT_CONTEXT.md`).
+La TUI non usa più `prompt_toolkit` e `rich` come framework separati. Dopo la migrazione del 30 marzo 2026, tutta l'interfaccia interattiva vive dentro `Textual`, che gestisce schermate, widget, keybinding e aggiornamenti live.
 
-**`prompt_toolkit`** gestisce i menu interattivi e i dialog: è un framework full-screen che prende controllo del terminale, disegna interfacce con tasti freccia e Enter, e non permette di mescolare output normale nel mezzo. È usato per la navigazione (menu home, dialog di scelta, input path).
+La struttura attuale è questa:
 
-**`rich`** gestisce la visualizzazione delle barre di avanzamento durante le operazioni lunghe: è progettato per output "live" nel terminale, con colori e animazioni. Funziona nello stesso flusso di output normale.
+- `PyDFApp` è la classe principale `textual.App`
+- `HomeScreen` mostra il menu principale e il pannello anteprima
+- `WizardScreen` guida l'utente nei flussi OCR e compressione
+- `CheckInputScreen` raccoglie il path da analizzare
+- `CheckResultScreen` mostra il verdetto di `check_ocr()`
+- `ProgressScreen` esegue OCR o compressione in un worker thread
+- `HelpScreen` mostra l'help come modal overlay
 
-Il problema è che non si possono usare contemporaneamente: quando `prompt_toolkit` ha il controllo del terminale, `rich` non può scrivere, e viceversa. L'architettura attuale li alterna: menu in `prompt_toolkit`, progress in `rich`, poi di nuovo `prompt_toolkit`. Questo è fragile su terminali non-standard. La soluzione pulita sarebbe unificarli su un solo framework, ma è un refactoring non banale.
+Il vantaggio architetturale è importante: non c'è più alternanza tra framework incompatibili sullo stesso terminale. Layout, dialog e progress appartengono tutti allo stesso event loop.
 
-### Import lazy in `tui.py`
+### Worker e aggiornamenti UI
 
-Le funzioni `_load_prompt_toolkit()` e `_load_rich()` importano le librerie all'interno di funzioni invece che in cima al file, per lo stesso motivo già visto in `ocr.py`: se la libreria non è installata, l'errore viene convertito in un `PDFToolError` leggibile invece di un crash tecnico.
+`ProgressScreen` usa `@work(thread=True)` per eseguire OCR e compressione senza bloccare la UI. La pipeline passa aggiornamenti tramite `progress_callback`; il thread worker inoltra questi aggiornamenti con `app.call_from_thread(...)`, che è il modo thread-safe con cui Textual aggiorna lo stato visuale.
+
+### Import in `tui.py`
+
+A differenza di `ocr.py` e `compress.py`, `tui.py` importa `textual` direttamente in testa al file. È una scelta deliberata: la TUI è una dipendenza diretta del progetto. Se `textual` manca, il problema non è del singolo comando ma dell'ambiente Python, quindi la soluzione corretta è sistemare la `.venv`, non intercettare l'errore dentro la TUI.
 
 ---
 
@@ -279,7 +289,7 @@ Questi pattern appaiono in più punti del codice. Riconoscerli ti permette di le
 
 **Callback opzionale**: `callback: Callable[[X], None] | None = None`. Una funzione accetta opzionalmente un'altra funzione come parametro. Se `None`, non fa niente; altrimenti la chiama con aggiornamenti. Permette di usare la stessa pipeline in contesti diversi (CLI silenziosa, TUI con progress bar, test che catturano gli aggiornamenti).
 
-**Import lazy in funzione**: le dipendenze pesanti (pytesseract, pdf2image, prompt_toolkit, rich) vengono importate dentro la funzione che le usa, non in cima al file. Permette di catturare `ImportError` e convertirlo in un messaggio leggibile.
+**Import lazy in funzione**: le dipendenze pesanti o opzionali lato backend (`pytesseract`, `pdf2image`, `pypdf`) vengono importate dentro la funzione che le usa, non in cima al file. Permette di catturare `ImportError` e convertirlo in un messaggio leggibile. `textual` fa eccezione perché è una dipendenza diretta della TUI.
 
 **Staging temporaneo**: l'output viene scritto in una directory temporanea, poi spostato a destinazione. Garantisce atomicità: o il file finale è completo, o non esiste.
 
@@ -289,13 +299,13 @@ Questi pattern appaiono in più punti del codice. Riconoscerli ti permette di le
 
 ## 13. Le issue aperte — Cosa manca e perché
 
-Il `PROJECT_CONTEXT.md` tiene traccia delle issue aperte. Capire perché esistono è utile per ragionare su come affrontarle.
+Il `PROJECT_CONTEXT.md` tiene traccia dei limiti ancora aperti. I più importanti oggi sono tre.
 
-**Issue #3 (alternanza prompt_toolkit / rich)** è il problema architetturale principale. La causa è che i due framework hanno modelli di controllo del terminale incompatibili. La soluzione sarebbe scegliere uno solo — probabilmente `textual` (un framework moderno basato su `rich`) — ma richiederebbe riscrivere `tui.py` da zero.
+**OCR non interrompibile dentro la singola pagina**: Tesseract lavora in codice C. Python può fermare il flusso tra una pagina e l'altra, ma non entrare nel mezzo di una chiamata OCR già partita. La TUI resta responsiva, ma la cancellazione non è istantanea su pagine pesanti.
 
-**Issue #6 (OCR non interrompibile)** è un limite intrinseco di Tesseract: il processo di riconoscimento di una singola pagina avviene in codice C, e Python non può interromperlo. L'unico modo è eseguire Tesseract in un thread separato e tenere il thread principale libero di reagire a Ctrl+C. Il thread worker può essere segnalato di fermarsi tra una pagina e l'altra.
+**Gap nei test sulla TUI**: i test attuali coprono bene helper, parser e backend mockato, ma non esercitano davvero i flow Textual a livello schermata/widget. La parte più nuova del progetto è quindi anche quella meno blindata.
 
-**Gap nei test** sono documentati esplicitamente. I test attuali coprono principalmente il path OCR → TXT e i helper di configurazione. Mancano test per il path OCR → PDF, per la TUI di compressione, e per i casi limite dei path incrementali. Aggiungere questi test è un buon punto di partenza per chi vuole imparare a scrivere test — il pattern da seguire è già lì.
+**Fragilità del setup**: il pacchetto dichiara supporto `Python 3.10+`, ma `setup.sh` oggi patcha il wrapper puntando a `.venv/bin/python3.12`. È il workflow verificato, ma non è ancora un setup completamente agnostico rispetto alla minor version.
 
 ---
 
@@ -303,10 +313,10 @@ Il `PROJECT_CONTEXT.md` tiene traccia delle issue aperte. Capire perché esiston
 
 Se `pydf-tool` non si trova: la venv non è attiva. Esegui `source .venv/bin/activate` dalla directory del progetto.
 
-Se si trova ma crasha con `ModuleNotFoundError: No module named 'pydf_tool'`: il patch di `setup.sh` non è stato applicato. Esegui `bash setup.sh` di nuovo.
+Se si trova ma crasha con `ModuleNotFoundError: No module named 'pydf_tool'` oppure con import mancanti lato TUI: il setup della venv è incoerente. Esegui `rm -rf .venv && bash setup.sh`.
 
-Se le dipendenze Python mancano dopo un `pip install -e .`: riapplica il patch con `bash setup.sh` (è necessario dopo ogni reinstall).
+Se le dipendenze Python cambiano dopo un `pip install -e .`: riapplica il patch con `bash setup.sh` (è necessario dopo ogni reinstall manuale).
 
-Se i test falliscono: esegui `PYTHONPATH=src python3 -m unittest discover -s tests -v` dalla root del progetto. Il `PYTHONPATH=src` dice a Python dove trovare il pacchetto senza installarlo.
+Se i test falliscono: esegui `source .venv/bin/activate` e poi `PYTHONPATH=src python -m unittest discover -s tests -v` dalla root del progetto. Il comando con `python3` di sistema può fallire semplicemente perché `textual` non è installato globalmente.
 
 Se vuoi capire cosa fa un pezzo di codice specifico: il modo più veloce è aggiungere un `print()` temporaneo, eseguire il comando reale, e osservare l'output. Non è elegante, ma funziona. Per qualcosa di più sistematico, `python3 -m pdb` è il debugger interattivo di Python.

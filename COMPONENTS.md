@@ -7,11 +7,16 @@ Questo file elenca le dipendenze esterne di `PyDF Tool` (`pydf-tool`) e va aggio
 | Nome | Versione | Licenza | Scopo nel progetto |
 | --- | --- | --- | --- |
 | `pdf2image` | `1.17.0` | `MIT` | Converte le pagine del PDF in immagini da passare all OCR. |
-| `prompt_toolkit` | `3.0.42` | `BSD-3-Clause` | Gestisce menu a frecce, keybindings e dialog della TUI minimalista. |
+| `textual` | `>=0.70.0` (installata: `8.2.1`) | `MIT` | Framework unico della TUI interattiva: schermate, widget, keybinding e progress. |
 | `pytesseract` | `0.3.13` | `Apache-2.0` | Wrapper Python del motore Tesseract per OCR e generazione del PDF ricercabile. |
-| `Pillow` | `12.1.1` | `MIT-CMU` | Backend immagini usato da `pdf2image` e `pytesseract` durante la pipeline OCR. |
-| `pypdf` | `6.8.0` | `BSD-3-Clause` | Unisce le singole pagine PDF prodotte da Tesseract nel PDF finale ricercabile. |
-| `rich` | `13.7.1` | `MIT` | Renderizza pannelli essenziali, progress bar e schermate di stato della TUI. |
+| `Pillow` | `>=10.3.0,<12.0` (installata: `11.3.0`) | `MIT-CMU` | Backend immagini usato da `pdf2image` e `pytesseract` durante la pipeline OCR. |
+| `pypdf` | `6.8.0` | `BSD-3-Clause` | Legge i PDF per `check_ocr` e unisce le singole pagine OCR nel PDF finale ricercabile. |
+
+## Dipendenze transitive rilevanti
+
+| Nome | Provenienza | Licenza | Scopo nel progetto |
+| --- | --- | --- | --- |
+| `rich` | transitiva via `textual` | `MIT` | Rendering interno usato da Textual; non è più una dipendenza diretta del progetto. |
 
 ## Dipendenze di sistema
 

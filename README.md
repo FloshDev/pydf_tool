@@ -2,19 +2,21 @@
 
 > **Progetto in sviluppo attivo.** Funziona, ma comandi, opzioni e comportamenti possono cambiare tra una versione e l’altra. Non considerare ancora l’interfaccia come stabile.
 
-`pydf-tool` è un tool da terminale per macOS pensato per semplificare due operazioni comuni sui PDF: l’OCR di documenti scansionati e la compressione di file pesanti. Disponibile sia come CLI diretta che come TUI interattiva.
+`pydf-tool` è un tool da terminale per macOS pensato per semplificare tre operazioni comuni sui PDF: verificare se un file necessita di OCR, eseguire OCR su documenti scansionati e comprimere PDF pesanti. È disponibile sia come CLI diretta che come TUI interattiva.
 
 -----
 
 ## Stato del progetto
 
-Il progetto è funzionale nelle sue due aree principali — OCR e compressione — ma è ancora in evoluzione. La struttura dei comandi, le opzioni disponibili e i dettagli di comportamento possono variare mentre la base si stabilizza. Se usi il tool regolarmente, verifica il comportamento dopo ogni aggiornamento.
+Il progetto è funzionale nelle sue tre aree principali — verifica OCR, OCR e compressione — ma è ancora in evoluzione. La struttura dei comandi, le opzioni disponibili e alcuni dettagli di comportamento possono variare mentre la base si stabilizza. Se usi il tool regolarmente, verifica il comportamento dopo ogni aggiornamento.
 
 -----
 
 ## Prerequisiti
 
 macOS con Python 3.10 o superiore.
+
+Nota pratica: il pacchetto dichiara supporto `Python 3.10+`, ma il workflow di setup attualmente verificato è quello con Python.org Python 3.12 su macOS, perché `setup.sh` applica un workaround specifico per quel contesto.
 
 Per verificare la versione di Python installata:
 
@@ -39,10 +41,11 @@ brew install tesseract tesseract-lang poppler ghostscript
 
 ## Installazione
 
+Metodo consigliato:
+
 ```bash
-python3 -m venv .venv
+bash setup.sh
 source .venv/bin/activate
-pip install -e .
 ```
 
 Per verificare che il comando sia disponibile:
@@ -52,6 +55,8 @@ pydf-tool --help
 ```
 
 Se il progetto era già installato in precedenza, riesegui `pip install -e .` dopo aggiornamenti del codice.
+
+Se modifichi manualmente le dipendenze o rilanci `pip install -e .`, riesegui anche `bash setup.sh` per riallineare il wrapper `pydf-tool` e il workaround macOS.
 
 -----
 
@@ -138,8 +143,9 @@ Se il PDF contiene già immagini molto compresse o testo vettoriale, i margini d
 
 ## Sviluppo
 
-Esegui i test locali con:
+Esegui i test locali con la venv attiva:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+source .venv/bin/activate
+PYTHONPATH=src python -m unittest discover -s tests -v
 ```

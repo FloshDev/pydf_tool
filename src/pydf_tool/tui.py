@@ -87,10 +87,11 @@ Invio · Esc · Q chiudono questa schermata"""
 _HELP_TEXT_PLAIN = """\
 PyDF Tool — strumenti PDF da riga di comando
 
-  pydf-tool ocr FILE [--lang LINGUA] [--format pdf|txt] [--output PATH]
-  pydf-tool compress FILE [--level low|medium|high] [--output PATH]
+  pydf-tool ocr FILE [--lang LINGUA] [--output PATH]
+  pydf-tool compress FILE [--level low|medium|high|1-100] [--output PATH] [--grayscale]
   pydf-tool check FILE
 
+Per OCR, l'output è PDF o TXT in base all'estensione di PATH.
 Usa 'pydf-tool COMANDO --help' per dettagli sul singolo comando."""
 
 

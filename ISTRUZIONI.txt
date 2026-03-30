@@ -161,6 +161,7 @@ Passi dopo una modifica:
 Se invece sono cambiate le DIPENDENZE (pyproject.toml):
 
   pip install -e .
+  bash setup.sh
 
 Se la venv è da rifare da zero (es. dopo aggiornamento
 di Python, o errore "No module named"):
@@ -198,8 +199,10 @@ Poi verifica che funzioni:
       rm -rf .venv && bash setup.sh && source .venv/bin/activate
 
 "Dipendenze TUI mancanti"
-  → L'ambiente virtuale non è attivo. Esegui:
+  → L'ambiente virtuale non è attivo oppure non è stato
+    riallineato dopo un reinstall. Esegui:
     source .venv/bin/activate
+    bash setup.sh
 
 "Tesseract non trovato"
   → Installa con: brew install tesseract tesseract-lang
