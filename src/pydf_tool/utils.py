@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 import unicodedata
 from pathlib import Path
 
@@ -25,8 +26,32 @@ def _resolve_existing_path_variant(path: Path) -> Path | None:
     return None
 
 
+def _normalize_shell_path_text(path: str | Path) -> str | Path:
+    if not isinstance(path, str):
+        return path
+
+    text = path.strip()
+    if not text:
+        return text
+
+    if any(char in text for char in ("'", '"', "\\")):
+        try:
+            tokens = shlex.split(text)
+        except ValueError:
+            tokens = None
+        else:
+            if len(tokens) == 1:
+                return tokens[0]
+
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1]
+
+    return text
+
+
 def resolve_user_path(path: str | Path) -> Path:
-    candidate = Path(path).expanduser()
+    normalized_path = _normalize_shell_path_text(path)
+    candidate = Path(normalized_path).expanduser()
     existing_variant = _resolve_existing_path_variant(candidate)
     if existing_variant is not None:
         return existing_variant

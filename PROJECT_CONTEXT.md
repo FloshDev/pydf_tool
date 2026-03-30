@@ -42,6 +42,7 @@ Nota: per `ocr` il tipo di output non si sceglie con `--format`; dipende dall'es
 Schermate reali in `src/pydf_tool/tui.py`:
 
 - `HomeScreen`
+- `OCRMenuScreen`
 - `WizardScreen` per OCR e compressione
 - `CheckInputScreen`
 - `CheckResultScreen`
@@ -49,6 +50,21 @@ Schermate reali in `src/pydf_tool/tui.py`:
 - `HelpScreen`
 
 La TUI attuale non usa più `prompt_toolkit` o `rich` come framework separati: la migrazione a Textual è completata.
+La home attuale è un launcher a card con tre ingressi:
+
+- `OCR`
+- `Comprimi PDF`
+- `Help`
+
+Il flusso `OCR` apre un sottomenu dedicato con:
+
+- `Verifica OCR`
+- `Esegui OCR`
+- `Torna al menu`
+
+Nota UX verificata:
+- `CheckResultScreen` supporta navigazione tastiera tra i pulsanti con `↑↓←→`, `Tab` e `Shift+Tab`
+- il focus iniziale cade sul primo pulsante disponibile
 
 ---
 
@@ -82,10 +98,11 @@ La TUI attuale non usa più `prompt_toolkit` o `rich` come framework separati: l
 │       └── errors.py
 ├── tests/
 │   └── test_cli.py
-└── PDF Sample/
 ```
 
-Numero test attuale: `33` test `unittest` in `tests/test_cli.py`.
+Cartelle locali comunemente presenti ma non tracciate: `.superpowers/`, `PDF Sample/`.
+
+Numero test attuale: `38` test `unittest` in `tests/test_cli.py`.
 
 ---
 
@@ -184,8 +201,11 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 
 - TUI Textual pura
 - `PyDFApp` monta `HomeScreen`
+- `HomeScreen` funge da launcher e apre `OCR`, `Comprimi PDF` o `Help`
+- `OCRMenuScreen` separa `Verifica OCR` da `Esegui OCR`
 - `WizardScreen` gestisce i flussi guidati
 - `CheckInputScreen` e `CheckResultScreen` coprono `check`
+- `CheckResultScreen` gestisce il focus dei pulsanti via tastiera
 - `ProgressScreen` avvia OCR/compressione con `@work(thread=True)`
 - `dispatch_interactive_command()` resta come helper per comandi testuali e test
 
@@ -222,18 +242,38 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 
 ### Verificato in questa fase
 
-- worktree pulita su `main`
-- suite test verde: `33` test
+- suite test verde: `38` test
 - import e runtime verificati dentro `.venv`
 - struttura docs/spec/plan presente e leggibile
+- launcher TUI verificato con home, sottomenu OCR e focus pulsanti
 
 ### Funzionalità implementate
 
 - `check`, `ocr`, `compress` disponibili da CLI
-- TUI Textual con home, wizard, help, check e progress
+- TUI Textual con home launcher, sottomenu OCR, wizard, help, check e progress
 - OCR low-memory pagina per pagina
 - compressione con staging e supporto path Unicode
 - naming incrementale degli output
+
+### Ultima sessione Codex
+
+Sessione del `2026-03-31` svolta da `Codex`.
+
+File toccati in questa sessione:
+
+- `src/pydf_tool/tui.py`
+  - home ridisegnata come launcher
+  - `Help` reinserito nella lista principale
+  - nuovo `OCRMenuScreen` con `Verifica OCR` ed `Esegui OCR`
+  - fix focus/navigazione dei pulsanti in `CheckResultScreen`
+- `src/pydf_tool/tui.tcss`
+  - styling più leggibile per launcher, card menu, preview e pulsanti
+- `src/pydf_tool/utils.py`
+  - parsing di path shell-style con virgolette o spazi escapati
+- `tests/test_cli.py`
+  - test Textual per home, submenu OCR e navigazione pulsanti
+- `PROJECT_CONTEXT.md`
+  - stato reale TUI, conteggio test e note di handoff aggiornate
 
 ### Documenti storici rilevanti
 
@@ -255,7 +295,7 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 ### Gap nei test
 
 - nessun test dedicato al path OCR `.pdf`
-- nessun test reale dei flow Textual a livello schermata/widget
+- nessun test Textual completo sul wizard OCR/compress o sul flow `check -> run ocr`
 - nessun end-to-end con Tesseract o Ghostscript reali
 - nessun test per `resolve_incremental_output_path` con collisioni multiple
 

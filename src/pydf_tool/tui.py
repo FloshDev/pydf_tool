@@ -4,16 +4,16 @@ import argparse
 import shlex
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, ScrollableContainer
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Input, Label, ListItem, ListView, ProgressBar, Static
+from textual.widgets import Button, Input, ListItem, ListView, ProgressBar, Static
 
 from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
@@ -32,32 +32,100 @@ from .utils import (
 EXIT_COMMANDS = {"exit", "quit", ":q"}
 
 _HEADER_TEXT = """\
-╠══ PyDF Tool ══╣   OCR  ·  compress  ·  check
-──────────────────────────────────────────────
-strumenti PDF da riga di comando · macOS"""
+╠══ PyDF Tool ══╣
+launcher TUI per OCR, compressione e supporto
+scegli uno strumento per continuare"""
 
-_MENU_ITEMS: list[tuple[str, str, str]] = [
-    ("ocr",      "Esegui OCR",   "Converti un PDF scansionato in PDF ricercabile o testo."),
-    ("compress", "Comprimi PDF", "Riduci le dimensioni del file con Ghostscript."),
-    ("check",    "Verifica OCR", "Controlla se il PDF ha già testo estraibile."),
+_OCR_HEADER_TEXT = """\
+OCR
+verifica un PDF oppure avvia subito l'OCR guidato
+scegli l'azione da eseguire"""
+
+
+@dataclass(frozen=True)
+class MenuEntry:
+    key: str
+    title: str
+    summary: str
+    preview_title: str
+    preview_body: str
+    preview_hint: str
+
+
+_HOME_MENU_ITEMS: list[MenuEntry] = [
+    MenuEntry(
+        key="ocr-menu",
+        title="OCR",
+        summary="Verifica un PDF o avvia l'OCR guidato.",
+        preview_title="Suite OCR",
+        preview_body=(
+            "Apri il sottomenu OCR.\n"
+            "Da qui puoi controllare se il PDF ha gia testo estraibile "
+            "oppure lanciare direttamente il wizard OCR."
+        ),
+        preview_hint="Invio apre il sottomenu OCR",
+    ),
+    MenuEntry(
+        key="compress",
+        title="Comprimi PDF",
+        summary="Riduci il peso del file con Ghostscript.",
+        preview_title="Compressione PDF",
+        preview_body=(
+            "Riduci le dimensioni del PDF con preset guidati.\n"
+            "La CLI supporta anche livelli numerici 1-100 e la conversione in grigio."
+        ),
+        preview_hint="Invio apre il wizard di compressione",
+    ),
+    MenuEntry(
+        key="help",
+        title="Help",
+        summary="Controlli rapidi, flussi supportati e suggerimenti.",
+        preview_title="Guida rapida",
+        preview_body=(
+            "Apri la schermata di help della TUI.\n"
+            "Disponibile anche in qualsiasi momento con H o F1."
+        ),
+        preview_hint="Invio apre l'help",
+    ),
 ]
 
-_PREVIEW_TEXTS: dict[str, str] = {
-    "ocr": (
-        "Usa Tesseract per estrarre il testo da PDF scansionati.\n"
-        "Output: PDF ricercabile o file .txt"
+_OCR_MENU_ITEMS: list[MenuEntry] = [
+    MenuEntry(
+        key="check",
+        title="Verifica OCR",
+        summary="Analizza se il PDF ha gia testo ricercabile.",
+        preview_title="Verifica OCR",
+        preview_body=(
+            "Legge i metadati del PDF e stima se OCR e necessario.\n"
+            "Se serve, potrai poi passare direttamente al wizard OCR."
+        ),
+        preview_hint="Invio apre la verifica OCR",
     ),
-    "compress": (
-        "Usa Ghostscript per ridurre le dimensioni del file.\n"
-        "Preset: low · medium · high"
+    MenuEntry(
+        key="ocr",
+        title="Esegui OCR",
+        summary="Converti un PDF scansionato in PDF ricercabile o TXT.",
+        preview_title="OCR guidato",
+        preview_body=(
+            "Wizard a passi per scegliere file, lingua, formato e output.\n"
+            "Supporta italiano, inglese e combinazione it+en."
+        ),
+        preview_hint="Invio apre il wizard OCR",
     ),
-    "check": (
-        "Legge i metadati del PDF e stima se OCR è necessario.\n"
-        "Risultato immediato, nessuna elaborazione."
+    MenuEntry(
+        key="back",
+        title="Torna al menu",
+        summary="Rientra nella home principale del launcher.",
+        preview_title="Ritorno alla home",
+        preview_body=(
+            "Chiude il sottomenu OCR e riporta al launcher principale."
+        ),
+        preview_hint="Invio torna alla home",
     ),
-}
+]
 
-_FOOTER_HOME = "↑↓ naviga   Invio conferma   H/F1 help   Q/Esc esci"
+_FOOTER_HOME = "↑↓ naviga   Invio apre   H/F1 help   Q/Esc esci"
+_FOOTER_SUBMENU = "↑↓ naviga   Invio apre   Esc torna indietro"
 _FOOTER_WIZARD = "Invio avanza   Esc torna indietro"
 
 _HELP_TEXT = """\
@@ -77,6 +145,7 @@ Controlli
 
 Suggerimenti
 
+  · OCR apre un sottomenu con Verifica OCR e Esegui OCR
   · Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo
   · Esegui OCR in TXT: scegli formato TXT nel flusso guidato
   · Se annulli una compressione, il file parziale viene rimosso
@@ -114,6 +183,16 @@ class HelpScreen(ModalScreen):
         self.dismiss()
 
 
+class MenuEntryItem(ListItem):
+    def __init__(self, entry: MenuEntry) -> None:
+        super().__init__(id=entry.key)
+        self.entry = entry
+
+    def compose(self) -> ComposeResult:
+        yield Static(self.entry.title, classes="menu-item-title")
+        yield Static(self.entry.summary, classes="menu-item-summary")
+
+
 # ── HomeScreen ────────────────────────────────────────────────────────────────
 
 class HomeScreen(Screen):
@@ -127,29 +206,107 @@ class HomeScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Static(_HEADER_TEXT, id="header")
         with Horizontal(id="body"):
-            yield ListView(
-                *[ListItem(Label(label), id=key) for key, label, _ in _MENU_ITEMS],
-                id="menu-list",
-            )
-            yield Static(_PREVIEW_TEXTS[_MENU_ITEMS[0][0]], id="preview-panel")
+            with Vertical(id="menu-panel"):
+                yield Static("Strumenti", classes="panel-title")
+                yield ListView(
+                    *[MenuEntryItem(entry) for entry in _HOME_MENU_ITEMS],
+                    id="menu-list",
+                )
+            with Vertical(id="preview-panel"):
+                yield Static("Dettagli", classes="panel-title")
+                yield Static("", id="preview-title")
+                yield Static("", id="preview-body")
+                yield Static("", id="preview-hint")
         yield Static(_FOOTER_HOME, id="footer-bar")
 
+    def on_mount(self) -> None:
+        self._set_preview(_HOME_MENU_ITEMS[0].key)
+        self.query_one("#menu-list", ListView).focus()
+
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        if event.item is not None and event.item.id in _PREVIEW_TEXTS:
-            self.query_one("#preview-panel", Static).update(_PREVIEW_TEXTS[event.item.id])
+        if event.item is not None:
+            self._set_preview(event.item.id)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.item is not None:
             self._dispatch_action(event.item.id)
 
+    def _set_preview(self, action_id: str) -> None:
+        entry = next((item for item in _HOME_MENU_ITEMS if item.key == action_id), None)
+        if entry is None:
+            return
+        self.query_one("#preview-title", Static).update(entry.preview_title)
+        self.query_one("#preview-body", Static).update(entry.preview_body)
+        self.query_one("#preview-hint", Static).update(entry.preview_hint)
+
     def _dispatch_action(self, action_id: str) -> None:
-        if action_id == "check":
-            self.app.push_screen(CheckInputScreen())
-        else:
+        if action_id == "ocr-menu":
+            self.app.push_screen(OCRMenuScreen())
+        elif action_id == "compress":
             self.app.push_screen(WizardScreen(mode=action_id))
+        elif action_id == "help":
+            self.app.push_screen(HelpScreen())
 
     def action_quit_app(self) -> None:
         self.app.exit(0)
+
+    def action_push_help(self) -> None:
+        self.app.push_screen(HelpScreen())
+
+
+class OCRMenuScreen(Screen):
+    BINDINGS = [
+        Binding("escape", "go_back", "Indietro"),
+        Binding("h", "push_help", "Help"),
+        Binding("f1", "push_help", "Help"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Static(_OCR_HEADER_TEXT, id="header")
+        with Horizontal(id="body"):
+            with Vertical(id="menu-panel"):
+                yield Static("Azioni OCR", classes="panel-title")
+                yield ListView(
+                    *[MenuEntryItem(entry) for entry in _OCR_MENU_ITEMS],
+                    id="menu-list",
+                )
+            with Vertical(id="preview-panel"):
+                yield Static("Dettagli", classes="panel-title")
+                yield Static("", id="preview-title")
+                yield Static("", id="preview-body")
+                yield Static("", id="preview-hint")
+        yield Static(_FOOTER_SUBMENU, id="footer-bar")
+
+    def on_mount(self) -> None:
+        self._set_preview(_OCR_MENU_ITEMS[0].key)
+        self.query_one("#menu-list", ListView).focus()
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.item is not None:
+            self._set_preview(event.item.id)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.item is not None:
+            self._dispatch_action(event.item.id)
+
+    def _set_preview(self, action_id: str) -> None:
+        entry = next((item for item in _OCR_MENU_ITEMS if item.key == action_id), None)
+        if entry is None:
+            return
+        self.query_one("#preview-title", Static).update(entry.preview_title)
+        self.query_one("#preview-body", Static).update(entry.preview_body)
+        self.query_one("#preview-hint", Static).update(entry.preview_hint)
+
+    def _dispatch_action(self, action_id: str) -> None:
+        if action_id == "check":
+            self.app.push_screen(CheckInputScreen())
+        elif action_id == "ocr":
+            self.app.push_screen(WizardScreen(mode="ocr"))
+        else:
+            self.app.pop_screen()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
 
     def action_push_help(self) -> None:
         self.app.push_screen(HelpScreen())
@@ -347,6 +504,12 @@ def _verdict_label(verdict: str) -> str:
 class CheckResultScreen(Screen):
     BINDINGS = [
         Binding("escape", "go_home", "Menu"),
+        Binding("up", "focus_prev_button", "Prec", show=False),
+        Binding("left", "focus_prev_button", "Prec", show=False),
+        Binding("shift+tab", "focus_prev_button", "Prec", show=False),
+        Binding("down", "focus_next_button", "Succ", show=False),
+        Binding("right", "focus_next_button", "Succ", show=False),
+        Binding("tab", "focus_next_button", "Succ", show=False),
         Binding("enter", "default_action", "Continua"),
     ]
 
@@ -366,10 +529,14 @@ class CheckResultScreen(Screen):
         )
         yield Static("Verifica OCR — risultato", id="header")
         yield Static(table, id="result-table")
-        if r.verdict in ("ocr_needed", "mixed"):
-            yield Button("Esegui OCR su questo file", id="btn-run-ocr")
-        yield Button("Torna al menu", id="btn-home")
-        yield Static("Invio · Esc torna al menu", id="footer-bar")
+        with Vertical(id="result-buttons"):
+            if r.verdict in ("ocr_needed", "mixed"):
+                yield Button("Esegui OCR su questo file", id="btn-run-ocr")
+            yield Button("Torna al menu", id="btn-home")
+        yield Static("↑↓ cambia pulsante   Invio conferma   Esc torna al menu", id="footer-bar")
+
+    def on_mount(self) -> None:
+        self._focus_first_button()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-run-ocr":
@@ -378,12 +545,47 @@ class CheckResultScreen(Screen):
             self._go_home()
 
     def action_default_action(self) -> None:
+        focused = self.app.focused
+        if isinstance(focused, Button):
+            self._activate_button(focused.id)
+            return
         if self._result.verdict in ("ocr_needed", "mixed"):
             self._launch_ocr()
-        else:
-            self._go_home()
+            return
+        self._go_home()
 
     def action_go_home(self) -> None:
+        self._go_home()
+
+    def action_focus_next_button(self) -> None:
+        self._move_button_focus(1)
+
+    def action_focus_prev_button(self) -> None:
+        self._move_button_focus(-1)
+
+    def _buttons(self) -> list[Button]:
+        return list(self.query(Button))
+
+    def _focus_first_button(self) -> None:
+        buttons = self._buttons()
+        if buttons:
+            buttons[0].focus()
+
+    def _move_button_focus(self, direction: int) -> None:
+        buttons = self._buttons()
+        if not buttons:
+            return
+        focused = self.app.focused
+        if isinstance(focused, Button) and focused in buttons:
+            current_index = buttons.index(focused)
+        else:
+            current_index = 0
+        buttons[(current_index + direction) % len(buttons)].focus()
+
+    def _activate_button(self, button_id: str | None) -> None:
+        if button_id == "btn-run-ocr":
+            self._launch_ocr()
+            return
         self._go_home()
 
     def _launch_ocr(self) -> None:

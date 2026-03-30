@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import io
 import os
 import sys
@@ -20,7 +21,7 @@ from pydf_tool.compress import (
 from pydf_tool.errors import PDFToolError
 from pydf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
 from pydf_tool.ocr import run_ocr
-from pydf_tool.tui import PyDFApp, run_interactive_app
+from pydf_tool.tui import CheckResultScreen, MenuEntryItem, OCRMenuScreen, PyDFApp, run_interactive_app
 from pydf_tool.utils import ensure_pdf_input, resolve_user_path
 
 
@@ -167,6 +168,108 @@ class PathNormalizationTestCase(unittest.TestCase):
             self.assertTrue(resolved_path.parent.exists())
             self.assertTrue(resolved_path.parent.samefile(actual_dir))
             self.assertEqual(resolved_path.name, "out.pdf")
+
+    def test_ensure_pdf_input_accepts_shell_quoted_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sample_dir = Path(temp_dir, "PDF Sample")
+            sample_dir.mkdir()
+            actual_file = sample_dir / "noOCR.pdf"
+            actual_file.write_bytes(b"%PDF-1.4")
+
+            resolved_path = ensure_pdf_input(f"'{actual_file}'")
+
+            self.assertTrue(resolved_path.exists())
+            self.assertTrue(resolved_path.samefile(actual_file))
+
+    def test_ensure_pdf_input_accepts_shell_escaped_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sample_dir = Path(temp_dir, "PDF Sample")
+            sample_dir.mkdir()
+            actual_file = sample_dir / "noOCR.pdf"
+            actual_file.write_bytes(b"%PDF-1.4")
+
+            escaped_path = str(actual_file).replace(" ", "\\ ")
+            resolved_path = ensure_pdf_input(escaped_path)
+
+            self.assertTrue(resolved_path.exists())
+            self.assertTrue(resolved_path.samefile(actual_file))
+
+
+class TUIScreenTestCase(unittest.TestCase):
+    def _make_app(self) -> PyDFApp:
+        def parser_factory() -> argparse.ArgumentParser:
+            return argparse.ArgumentParser()
+
+        def executor(_namespace: argparse.Namespace) -> int:
+            return 0
+
+        return PyDFApp(parser_factory=parser_factory, executor=executor)
+
+    def test_home_menu_shows_ocr_compress_and_help(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test():
+                self.assertEqual(
+                    [item.id for item in app.screen.query(MenuEntryItem)],
+                    ["ocr-menu", "compress", "help"],
+                )
+                self.assertEqual(app.focused.id if app.focused else None, "menu-list")
+
+        asyncio.run(scenario())
+
+    def test_ocr_menu_is_a_submenu_with_check_and_ocr_actions(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertIsInstance(app.screen, OCRMenuScreen)
+                self.assertEqual(
+                    [item.id for item in app.screen.query(MenuEntryItem)],
+                    ["check", "ocr", "back"],
+                )
+                self.assertEqual(app.focused.id if app.focused else None, "menu-list")
+
+        asyncio.run(scenario())
+
+    def test_check_result_buttons_support_arrow_navigation(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                app.push_screen(
+                    CheckResultScreen(
+                        result=CheckOCRResult(
+                            pages_total=1,
+                            pages_with_text=0,
+                            pages_without_text=1,
+                            chars_per_page_avg=0.0,
+                            verdict="ocr_needed",
+                        ),
+                        input_path=Path("scan.pdf"),
+                    )
+                )
+                await pilot.pause()
+
+                self.assertEqual(app.focused.id if app.focused else None, "btn-run-ocr")
+
+                await pilot.press("down")
+                await pilot.pause()
+                self.assertEqual(app.focused.id if app.focused else None, "btn-home")
+
+                await pilot.press("up")
+                await pilot.pause()
+                self.assertEqual(app.focused.id if app.focused else None, "btn-run-ocr")
+
+                await pilot.press("right")
+                await pilot.pause()
+                self.assertEqual(app.focused.id if app.focused else None, "btn-home")
+
+                await pilot.press("left")
+                await pilot.pause()
+                self.assertEqual(app.focused.id if app.focused else None, "btn-run-ocr")
+
+        asyncio.run(scenario())
 
 
 class CompressionHelpersTestCase(unittest.TestCase):
