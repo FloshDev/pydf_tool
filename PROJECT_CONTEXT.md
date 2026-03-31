@@ -102,7 +102,7 @@ Nota UX verificata:
 
 Cartelle locali comunemente presenti ma non tracciate: `.superpowers/`, `PDF Sample/`.
 
-Numero test attuale: `38` test `unittest` in `tests/test_cli.py`.
+Numero test attuale: `43` test `unittest` in `tests/test_cli.py`.
 
 ---
 
@@ -242,7 +242,7 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 
 ### Verificato in questa fase
 
-- suite test verde: `38` test
+- suite test verde: `43` test
 - import e runtime verificati dentro `.venv`
 - struttura docs/spec/plan presente e leggibile
 - launcher TUI verificato con home, sottomenu OCR e focus pulsanti
@@ -251,6 +251,9 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 
 - `check`, `ocr`, `compress` disponibili da CLI
 - TUI Textual con home launcher, sottomenu OCR, wizard, help, check e progress
+- wizard TUI con scelte guidate a frecce per lingua, formato, colore e preset
+- compressione TUI con supporto al grado numerico personalizzato `1-100`
+- avvio OCR da `Verifica OCR` con path già in memoria e passo file saltato
 - OCR low-memory pagina per pagina
 - compressione con staging e supporto path Unicode
 - naming incrementale degli output
@@ -263,17 +266,36 @@ File toccati in questa sessione:
 
 - `src/pydf_tool/tui.py`
   - home ridisegnata come launcher
+  - header home separato in brand, sottotitolo e tagline per una gerarchia visiva piu chiara
+  - preview della home resa scrollabile per mantenere leggibile il testo anche su finestre strette
   - `Help` reinserito nella lista principale
   - nuovo `OCRMenuScreen` con `Verifica OCR` ed `Esegui OCR`
+  - wizard con passi a scelta via scorrimento per OCR e compressione
+  - supporto TUI al livello custom `1-100` nella compressione
+  - avvio OCR da `CheckResultScreen` con passo file saltato se il path è già noto
   - fix focus/navigazione dei pulsanti in `CheckResultScreen`
+  - fix ritorno al launcher da `ProgressScreen` e schermata finale check
 - `src/pydf_tool/tui.tcss`
   - styling più leggibile per launcher, card menu, preview e pulsanti
+  - scrollbar del menu strumenti uniformata alla palette e card home rese piu compatte
+  - tool selezionato evidenziato con barra laterale accent e pannello dettagli piu compatto
+  - highlight del tool selezionato aggiornato a riquadro accent completo e gutter scrollbar ridotto
+  - corretto il selettore CSS di highlight Textual (`-highlight`) e rimossa la scrollbar del menu strumenti
+  - ripristinato lo scroll verticale del menu strumenti mantenendo invisibile la scrollbar
+  - styling del wizard esteso alle liste di scelta guidata
+  - help, input e pulsanti riallineati al linguaggio visivo della home
 - `src/pydf_tool/utils.py`
   - parsing di path shell-style con virgolette o spazi escapati
 - `tests/test_cli.py`
   - test Textual per home, submenu OCR e navigazione pulsanti
+  - regressione sullo scroll automatico del menu home verso l'elemento evidenziato
+  - test sulle scelte guidate del wizard OCR e sul livello custom della compressione
+  - regressione sul wizard OCR precompilato che salta il passo file
+  - regressione sul ritorno alla home dopo il completamento di OCR/compressione
 - `PROJECT_CONTEXT.md`
   - stato reale TUI, conteggio test e note di handoff aggiornate
+- `GUIDA_CODICE.md`
+  - nuova sezione operativa per modificare in autonomia tutti i testi della TUI senza rompere la logica
 
 ### Documenti storici rilevanti
 
@@ -290,7 +312,6 @@ File toccati in questa sessione:
 
 - l'OCR non è interrompibile dentro la singola chiamata C di Tesseract
 - `Ctrl+C` viene servito tra una pagina e l'altra
-- il wizard TUI di compressione espone solo `low|medium|high`, non il livello numerico `1-100`
 
 ### Gap nei test
 

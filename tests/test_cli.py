@@ -11,6 +11,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from textual.widgets import Input, ListView
+
 from pydf_tool.check_ocr import CheckOCRResult, check_ocr
 from pydf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
 from pydf_tool.compress import (
@@ -21,7 +23,16 @@ from pydf_tool.compress import (
 from pydf_tool.errors import PDFToolError
 from pydf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
 from pydf_tool.ocr import run_ocr
-from pydf_tool.tui import CheckResultScreen, MenuEntryItem, OCRMenuScreen, PyDFApp, run_interactive_app
+from pydf_tool.tui import (
+    CheckResultScreen,
+    HomeScreen,
+    MenuEntryItem,
+    OCRMenuScreen,
+    ProgressScreen,
+    PyDFApp,
+    WizardScreen,
+    run_interactive_app,
+)
 from pydf_tool.utils import ensure_pdf_input, resolve_user_path
 
 
@@ -233,6 +244,100 @@ class TUIScreenTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_home_menu_scrolls_to_keep_highlighted_item_visible(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test(size=(80, 24)) as pilot:
+                menu = app.screen.query_one("#menu-list", ListView)
+
+                await pilot.press("down")
+                await pilot.pause()
+                await pilot.press("down")
+                await pilot.pause()
+
+                self.assertEqual(menu.highlighted_child.id if menu.highlighted_child else None, "help")
+                self.assertGreater(menu.scroll_y, 0)
+
+        asyncio.run(scenario())
+
+    def test_ocr_wizard_language_step_uses_scroll_selection(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="ocr")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values["file"] = "/tmp/input.pdf"
+                wizard.current_step = 1
+                await pilot.pause()
+
+                self.assertEqual(app.focused.id if app.focused else None, "step-choices")
+
+                choice_list = wizard.query_one("#step-choices", ListView)
+                self.assertEqual(
+                    choice_list.highlighted_child.choice.value if choice_list.highlighted_child else None,
+                    "it",
+                )
+
+                await pilot.press("down")
+                await pilot.pause()
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertEqual(wizard._values["lingua"], "en")
+                self.assertEqual(wizard.current_step, 2)
+
+        asyncio.run(scenario())
+
+    def test_prefilled_ocr_wizard_skips_file_step(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="ocr", prefill_path="/tmp/input.pdf")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                self.assertEqual(wizard._values["file"], "/tmp/input.pdf")
+                self.assertEqual([step.name for step in wizard._visible_steps()], ["Lingua", "Formato", "Output"])
+                self.assertEqual(app.focused.id if app.focused else None, "step-choices")
+
+        asyncio.run(scenario())
+
+    def test_compress_wizard_accepts_custom_numeric_level(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="compress")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values["file"] = "/tmp/input.pdf"
+                wizard.current_step = 1
+                await pilot.pause()
+
+                await pilot.press("down")
+                await pilot.pause()
+                await pilot.press("down")
+                await pilot.pause()
+                await pilot.press("down")
+                await pilot.pause()
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertEqual(wizard._values["livello"], "custom")
+                self.assertEqual(wizard.current_step, 2)
+                self.assertEqual(app.focused.id if app.focused else None, "step-input")
+
+                wizard.query_one("#step-input", Input).value = "42"
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertEqual(wizard._values["grado"], "42")
+                self.assertEqual(wizard.current_step, 3)
+
+        asyncio.run(scenario())
+
     def test_check_result_buttons_support_arrow_navigation(self) -> None:
         async def scenario() -> None:
             app = self._make_app()
@@ -268,6 +373,47 @@ class TUIScreenTestCase(unittest.TestCase):
                 await pilot.press("left")
                 await pilot.pause()
                 self.assertEqual(app.focused.id if app.focused else None, "btn-run-ocr")
+
+        asyncio.run(scenario())
+
+    def test_progress_result_enter_returns_to_home_screen(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="compress")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values = {
+                    "file": "/tmp/input.pdf",
+                    "livello": "medium",
+                    "colore": "color",
+                }
+                wizard.current_step = 3
+                await pilot.pause()
+                wizard.query_one("#step-input", Input).value = "/tmp/output.pdf"
+
+                progress = ProgressScreen(
+                    mode="compress",
+                    args={
+                        "input": Path("/tmp/input.pdf"),
+                        "level": "medium",
+                        "grayscale": False,
+                        "output": Path("/tmp/output.pdf"),
+                    },
+                )
+                progress._run_operation = lambda: None  # type: ignore[method-assign]
+                app.push_screen(progress)
+                await pilot.pause()
+
+                progress._show_result("Compressione completata", success=True)
+                await pilot.pause()
+
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertIsInstance(app.screen, HomeScreen)
+                self.assertEqual(len(app.screen_stack), 2)
 
         asyncio.run(scenario())
 

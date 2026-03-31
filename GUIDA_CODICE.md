@@ -250,6 +250,197 @@ Il vantaggio architetturale è importante: non c'è più alternanza tra framewor
 
 A differenza di `ocr.py` e `compress.py`, `tui.py` importa `textual` direttamente in testa al file. È una scelta deliberata: la TUI è una dipendenza diretta del progetto. Se `textual` manca, il problema non è del singolo comando ma dell'ambiente Python, quindi la soluzione corretta è sistemare la `.venv`, non intercettare l'errore dentro la TUI.
 
+### Mappa pratica di tutti i testi della TUI
+
+Se vuoi diventare indipendente nella modifica dei testi, la regola più utile è questa: **quasi tutto il copy della TUI vive in `src/pydf_tool/tui.py`**. In generale puoi cambiare liberamente le stringhe visibili all'utente, ma **non devi cambiare gli identificatori tecnici** (`key`, `id`, certi `name` dei passi) senza aggiornare anche la logica che li usa.
+
+Di seguito trovi una mappa pratica, divisa per categoria.
+
+#### 1. Testi del menu principale e del sottomenu OCR
+
+Le voci dei menu sono definite in due liste di `MenuEntry`:
+
+- `_HOME_MENU_ITEMS`
+- `_OCR_MENU_ITEMS`
+
+Ogni `MenuEntry` contiene cinque campi testuali veri e propri:
+
+- `title` → titolo della card nel pannello `Strumenti`
+- `summary` → sottotitolo della card nel pannello `Strumenti`
+- `preview_title` → titolo del pannello `Dettagli`
+- `preview_body` → testo principale del pannello `Dettagli`
+- `preview_hint` → hint nel footer del pannello `Dettagli`
+
+Questi campi li puoi riscrivere liberamente senza toccare il comportamento della TUI.
+
+**Non cambiare invece alla cieca `key`**, perché viene usata per capire cosa aprire. Esempio:
+
+```python
+MenuEntry(
+    key="compress",
+    title="Comprimi PDF",
+    summary="Riduci il peso del file con Ghostscript.",
+    preview_title="Compressione PDF",
+    preview_body="...",
+    preview_hint="Invio apre il wizard di compressione",
+)
+```
+
+Qui puoi cambiare tutto il testo, ma se cambi `key="compress"` devi poi aggiornare anche `_dispatch_action()`.
+
+#### 2. Header, sottotitoli, titoli pannello e footer
+
+I testi strutturali della home non stanno in una costante unica: sono scritti direttamente dentro `HomeScreen.compose()`:
+
+- `"╠══ PyDF Tool ══╣"` → brand principale
+- `"launcher TUI per OCR, compressione e supporto"` → sottotitolo
+- `"scegli uno strumento per continuare"` → tagline
+- `"Strumenti"` e `"Dettagli"` → titoli dei due pannelli
+
+Il sottomenu OCR usa invece la costante `_OCR_HEADER_TEXT`.
+
+I footer principali sono centralizzati qui:
+
+- `_FOOTER_HOME`
+- `_FOOTER_SUBMENU`
+- `_FOOTER_WIZARD`
+
+L'help testuale è in:
+
+- `_HELP_TEXT` → help mostrato nella `HelpScreen`
+- `_HELP_TEXT_PLAIN` → help stampato nella CLI testuale / comandi `help`
+
+Queste stringhe sono sicure da modificare liberamente.
+
+#### 3. Prompt del wizard OCR e compressione
+
+I passi dei wizard stanno in `_WIZARD_STEPS` e usano il dataclass `WizardStep`.
+Quando un passo ha opzioni discrete, usa anche `WizardChoice`.
+
+Ogni passo ha:
+
+- `name`
+- `prompt`
+- `placeholder`
+- `choices` opzionale
+
+Esempio:
+
+```python
+WizardStep(
+    "Lingua",
+    "Lingua del documento:",
+    "seleziona con le frecce",
+    choices=[
+        WizardChoice("it", "Italiano", "OCR in italiano."),
+        WizardChoice("en", "Inglese", "OCR in inglese."),
+        WizardChoice("it+en", "Italiano + Inglese", "Riconoscimento bilingue."),
+    ],
+)
+```
+
+Nei passi con `choices`, la TUI non usa più un input libero: mostra una lista navigabile con `↑↓` e conferma con `Invio`.
+Questo vale oggi per:
+
+- lingua OCR
+- formato output OCR
+- livello di compressione
+- modalità colore
+
+Il livello di compressione supporta anche `Personalizzato`, che apre un passo successivo con input numerico `1-100`.
+Quando il wizard OCR viene aperto da `Verifica OCR`, il path del file viene già salvato e il passo `File` non viene mostrato: il flusso parte direttamente da `Lingua`.
+
+Qui c'è una distinzione importante:
+
+- puoi cambiare senza problemi `prompt` e `placeholder`
+- puoi cambiare `choices` solo se i nuovi `value` sono compatibili con `_validate()` e `_build_args()`
+- **non conviene cambiare `name`** se non sai cosa stai facendo
+
+Il motivo è che il wizard salva i valori usando `name.lower()` come chiave. Per esempio:
+
+- `"File"` diventa `"file"`
+- `"Lingua"` diventa `"lingua"`
+- `"Formato"` diventa `"formato"`
+- `"Livello"` diventa `"livello"`
+
+Poi `_build_args()` legge proprio quelle chiavi. Se rinomini `"Lingua"` in `"Lingua OCR"` senza aggiornare `_build_args()`, il wizard smette di trovare il valore corretto.
+
+Regola pratica:
+
+- se vuoi cambiare solo il testo mostrato all'utente, modifica `prompt` e `placeholder`
+- se vuoi cambiare come appare una scelta a schermo, modifica `WizardChoice.label` e `WizardChoice.summary`
+- se vuoi cambiare anche il nome del passo, devi aggiornare `_build_args()` e in alcuni casi `_validate()`
+
+#### 4. Pulsanti, schermate singole e microcopy runtime
+
+I testi delle schermate non guidate sono scritti direttamente nelle rispettive `compose()`:
+
+- `CheckInputScreen.compose()`
+- `CheckResultScreen.compose()`
+- `ProgressScreen.compose()`
+- `HelpScreen.compose()`
+
+Esempi tipici:
+
+- `"Verifica OCR"`
+- `"Esegui OCR su questo file"`
+- `"Torna al menu"`
+- `"Ctrl+C per annullare"`
+- `"Invio per tornare al menu"`
+
+Qui puoi cambiare quasi sempre il testo visibile. Devi però lasciare invariati gli `id` dei pulsanti se non vuoi rompere la logica:
+
+```python
+Button("Torna al menu", id="btn-home")
+```
+
+Puoi cambiare `"Torna al menu"` in qualunque cosa.
+Non devi cambiare `id="btn-home"` se non aggiorni anche `on_button_pressed()` e `_activate_button()`.
+
+#### 5. Etichette di verdetto e testi derivati
+
+La funzione `_verdict_label()` traduce i valori tecnici del backend nei testi leggibili mostrati all'utente:
+
+- `ocr_needed` → `"OCR necessario"`
+- `already_searchable` → `"Già ricercabile"`
+- `mixed` → `"Parzialmente ricercabile"`
+
+Se vuoi cambiare il tono di questi messaggi, il posto giusto è quello.
+
+#### 6. Cosa puoi cambiare da solo e cosa no
+
+Puoi cambiare in autonomia:
+
+- testi del brand, sottotitoli e tagline
+- titoli pannello (`Strumenti`, `Dettagli`)
+- titoli e sottotitoli delle card menu
+- testi del pannello `Dettagli`
+- footer e hint
+- help esteso e help plain
+- prompt e placeholder del wizard
+- testi dei pulsanti
+- etichette user-facing dei verdetti
+
+Devi fare attenzione o aggiornare anche la logica se tocchi:
+
+- `MenuEntry.key`
+- `Button(..., id="...")`
+- `WizardStep.name`
+- `WizardStep.choices`
+- i valori tecnici del backend (`ocr_needed`, `mixed`, ecc.)
+
+#### 7. Workflow pratico per cambiare un testo senza perderti
+
+Quando vuoi cambiare copy nella TUI, il flusso più sicuro è questo:
+
+1. Cerca la stringa con `rg -n "testo da cambiare" src/pydf_tool/tui.py`.
+2. Cambia solo il testo visibile, non gli identificatori tecnici.
+3. Esegui `PYTHONPATH=src ./.venv/bin/python -m unittest discover -s tests -v`.
+4. Apri `pydf-tool` e controlla almeno home, sottomenu OCR, wizard e help.
+5. Verifica sempre anche una finestra stretta (`80x24` o simile), perché la TUI è sensibile alla lunghezza del copy.
+
+Se vuoi rendere un testo più lungo, ricorda che la parte visuale dipende anche da `src/pydf_tool/tui.tcss`: larghezza dei pannelli, padding, scroll e wrap possono richiedere piccoli aggiustamenti CSS.
+
 ---
 
 ## 11. I test — Come funzionano i mock

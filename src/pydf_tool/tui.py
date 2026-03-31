@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -52,6 +52,13 @@ class MenuEntry:
     preview_hint: str
 
 
+@dataclass(frozen=True)
+class WizardChoice:
+    value: str
+    label: str
+    summary: str = ""
+
+
 _HOME_MENU_ITEMS: list[MenuEntry] = [
     MenuEntry(
         key="ocr-menu",
@@ -60,8 +67,8 @@ _HOME_MENU_ITEMS: list[MenuEntry] = [
         preview_title="Suite OCR",
         preview_body=(
             "Apri il sottomenu OCR.\n"
-            "Da qui puoi controllare se il PDF ha gia testo estraibile "
-            "oppure lanciare direttamente il wizard OCR."
+            "Verifica se il PDF ha testo estraibile\n"
+            "oppure avvia subito il wizard OCR."
         ),
         preview_hint="Invio apre il sottomenu OCR",
     ),
@@ -71,8 +78,9 @@ _HOME_MENU_ITEMS: list[MenuEntry] = [
         summary="Riduci il peso del file con Ghostscript.",
         preview_title="Compressione PDF",
         preview_body=(
-            "Riduci le dimensioni del PDF con preset guidati.\n"
-            "La CLI supporta anche livelli numerici 1-100 e la conversione in grigio."
+            "Riduci le dimensioni del PDF.\n"
+            "Usa preset guidati nella TUI oppure\n"
+            "livelli 1-100 dalla CLI."
         ),
         preview_hint="Invio apre il wizard di compressione",
     ),
@@ -82,8 +90,9 @@ _HOME_MENU_ITEMS: list[MenuEntry] = [
         summary="Controlli rapidi, flussi supportati e suggerimenti.",
         preview_title="Guida rapida",
         preview_body=(
-            "Apri la schermata di help della TUI.\n"
-            "Disponibile anche in qualsiasi momento con H o F1."
+            "Controlli rapidi e flussi supportati.\n"
+            "Apri l'help in qualsiasi momento\n"
+            "con H o F1."
         ),
         preview_hint="Invio apre l'help",
     ),
@@ -126,7 +135,8 @@ _OCR_MENU_ITEMS: list[MenuEntry] = [
 
 _FOOTER_HOME = "↑↓ naviga   Invio apre   H/F1 help   Q/Esc esci"
 _FOOTER_SUBMENU = "↑↓ naviga   Invio apre   Esc torna indietro"
-_FOOTER_WIZARD = "Invio avanza   Esc torna indietro"
+_FOOTER_WIZARD_INPUT = "Invio avanza   Esc torna indietro"
+_FOOTER_WIZARD_CHOICE = "↑↓ seleziona   Invio conferma   Esc torna indietro"
 
 _HELP_TEXT = """\
 Flussi supportati
@@ -164,6 +174,11 @@ Per OCR, l'output è PDF o TXT in base all'estensione di PATH.
 Usa 'pydf-tool COMANDO --help' per dettagli sul singolo comando."""
 
 
+def _return_to_home(app: App) -> None:
+    while len(app.screen_stack) > 1 and not isinstance(app.screen, HomeScreen):
+        app.pop_screen()
+
+
 # ── HelpScreen ────────────────────────────────────────────────────────────────
 
 class HelpScreen(ModalScreen):
@@ -193,6 +208,17 @@ class MenuEntryItem(ListItem):
         yield Static(self.entry.summary, classes="menu-item-summary")
 
 
+class WizardChoiceItem(ListItem):
+    def __init__(self, choice: WizardChoice) -> None:
+        super().__init__()
+        self.choice = choice
+
+    def compose(self) -> ComposeResult:
+        yield Static(self.choice.label, classes="menu-item-title")
+        if self.choice.summary:
+            yield Static(self.choice.summary, classes="menu-item-summary")
+
+
 # ── HomeScreen ────────────────────────────────────────────────────────────────
 
 class HomeScreen(Screen):
@@ -204,7 +230,13 @@ class HomeScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static(_HEADER_TEXT, id="header")
+        with Vertical(id="home-header"):
+            yield Static("╠══ PyDF Tool ══╣", id="home-brand")
+            yield Static(
+                "launcher TUI per OCR, compressione e supporto",
+                id="home-subtitle",
+            )
+            yield Static("scegli uno strumento per continuare", id="home-tagline")
         with Horizontal(id="body"):
             with Vertical(id="menu-panel"):
                 yield Static("Strumenti", classes="panel-title")
@@ -214,8 +246,9 @@ class HomeScreen(Screen):
                 )
             with Vertical(id="preview-panel"):
                 yield Static("Dettagli", classes="panel-title")
-                yield Static("", id="preview-title")
-                yield Static("", id="preview-body")
+                with ScrollableContainer(id="preview-copy"):
+                    yield Static("", id="preview-title")
+                    yield Static("", id="preview-body")
                 yield Static("", id="preview-hint")
         yield Static(_FOOTER_HOME, id="footer-bar")
 
@@ -272,8 +305,9 @@ class OCRMenuScreen(Screen):
                 )
             with Vertical(id="preview-panel"):
                 yield Static("Dettagli", classes="panel-title")
-                yield Static("", id="preview-title")
-                yield Static("", id="preview-body")
+                with ScrollableContainer(id="preview-copy"):
+                    yield Static("", id="preview-title")
+                    yield Static("", id="preview-body")
                 yield Static("", id="preview-hint")
         yield Static(_FOOTER_SUBMENU, id="footer-bar")
 
@@ -319,20 +353,56 @@ class WizardStep:
     name: str
     prompt: str
     placeholder: str
-    choices: list[str] | None = None
+    choices: list[WizardChoice] | None = None
 
 
 _WIZARD_STEPS: dict[str, list[WizardStep]] = {
     "ocr": [
         WizardStep("File",    "Percorso del PDF da elaborare:",    "es. ~/Documents/doc.pdf"),
-        WizardStep("Lingua",  "Lingua del documento:",              "it / en / it+en", choices=["it", "en", "it+en"]),
-        WizardStep("Formato", "Formato output:",                    "pdf / txt",        choices=["pdf", "txt"]),
+        WizardStep(
+            "Lingua",
+            "Lingua del documento:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("it", "Italiano", "OCR in italiano."),
+                WizardChoice("en", "Inglese", "OCR in inglese."),
+                WizardChoice("it+en", "Italiano + Inglese", "Riconoscimento bilingue."),
+            ],
+        ),
+        WizardStep(
+            "Formato",
+            "Formato output:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("pdf", "PDF ricercabile", "Mantiene il layout del documento."),
+                WizardChoice("txt", "Testo TXT", "Esporta solo il testo estratto."),
+            ],
+        ),
         WizardStep("Output",  "Percorso file di output:",           "es. ~/Desktop/out.pdf (vuoto = automatico)"),
     ],
     "compress": [
         WizardStep("File",    "Percorso del PDF da comprimere:",   "es. ~/Documents/doc.pdf"),
-        WizardStep("Livello", "Livello di compressione:",           "low / medium / high", choices=["low", "medium", "high"]),
-        WizardStep("Colore",  "Modalità colore:",                   "color / gray",         choices=["color", "gray"]),
+        WizardStep(
+            "Livello",
+            "Livello di compressione:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("low", "Low", "Compressione leggera, qualità più alta."),
+                WizardChoice("medium", "Medium", "Bilanciamento tra qualità e peso."),
+                WizardChoice("high", "High", "Compressione forte, file più leggero."),
+                WizardChoice("custom", "Personalizzato", "Inserisci un valore numerico da 1 a 100."),
+            ],
+        ),
+        WizardStep("Grado",   "Grado personalizzato di compressione:", "1-100"),
+        WizardStep(
+            "Colore",
+            "Modalità colore:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("color", "Colori originali", "Mantiene il PDF a colori."),
+                WizardChoice("gray", "Scala di grigi", "Riduce il peso convertendo in grigio."),
+            ],
+        ),
         WizardStep("Output",  "Percorso file di output:",           "es. ~/Desktop/out.pdf (vuoto = automatico)"),
     ],
 }
@@ -351,6 +421,8 @@ class WizardScreen(Screen):
         self._steps = _WIZARD_STEPS[mode]
         self._values: dict[str, str] = {}
         self._prefill_path = prefill_path
+        if self._prefill_path:
+            self._values["file"] = self._prefill_path
 
     def compose(self) -> ComposeResult:
         title = "Esegui OCR" if self._mode == "ocr" else "Comprimi PDF"
@@ -358,57 +430,110 @@ class WizardScreen(Screen):
         yield Static(title, id="wizard-title")
         yield Static("", id="step-prompt")
         yield Input(id="step-input")
+        yield ListView(id="step-choices")
         yield Static("", id="step-error", classes="error-label")
-        yield Static(_FOOTER_WIZARD, id="footer-bar")
+        yield Static("", id="footer-bar")
 
     def on_mount(self) -> None:
         self._render_step(0)
-        if self._prefill_path:
-            self.query_one("#step-input", Input).value = self._prefill_path
 
     def watch_current_step(self, step: int) -> None:
         self._render_step(step)
 
-    def _render_step(self, step: int) -> None:
+    def _visible_steps(self) -> list[WizardStep]:
         steps = self._steps
+        if self._mode == "ocr" and self._prefill_path:
+            steps = [step for step in steps if step.name != "File"]
+        if self._mode == "compress":
+            steps = [
+                step
+                for step in steps
+                if step.name != "Grado" or self._values.get("livello") == "custom"
+            ]
+        return steps
+
+    def _render_step(self, step: int) -> None:
+        steps = self._visible_steps()
         parts = []
         for i, s in enumerate(steps):
             marker = "▶ " if i == step else "   "
             parts.append(f"{marker}{i + 1}. {s.name}")
         self.query_one("#step-indicator", Static).update("  ".join(parts))
-        self.query_one("#step-prompt", Static).update(steps[step].prompt)
+        current = steps[step]
+        self.query_one("#step-prompt", Static).update(current.prompt)
         inp = self.query_one("#step-input", Input)
-        inp.placeholder = steps[step].placeholder
-        inp.value = self._values.get(steps[step].name.lower(), "")
-        inp.focus()
+        choice_list = self.query_one("#step-choices", ListView)
+        if current.choices:
+            inp.display = False
+            choice_list.display = True
+            choice_list.clear()
+            choice_list.extend([WizardChoiceItem(choice) for choice in current.choices])
+            selected_value = self._values.get(current.name.lower(), current.choices[0].value)
+            choice_list.focus()
+            self.call_after_refresh(self._focus_choice_value, selected_value)
+            self.query_one("#footer-bar", Static).update(_FOOTER_WIZARD_CHOICE)
+        else:
+            choice_list.display = False
+            inp.display = True
+            inp.placeholder = current.placeholder
+            inp.value = self._values.get(current.name.lower(), "")
+            inp.focus()
+            self.query_one("#footer-bar", Static).update(_FOOTER_WIZARD_INPUT)
         self.query_one("#step-error", Static).update("")
+
+    def _focus_choice_value(self, value: str) -> None:
+        step = self._visible_steps()[self.current_step]
+        choices = step.choices or []
+        choice_list = self.query_one("#step-choices", ListView)
+        choice_list.index = next(
+            (index for index, choice in enumerate(choices) if choice.value == value),
+            0,
+        )
+        choice_list.focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self._advance(event.value.strip())
 
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.list_view.id != "step-choices":
+            return
+        if isinstance(event.item, WizardChoiceItem):
+            self._advance(event.item.choice.value)
+
     def _advance(self, value: str) -> None:
         step = self.current_step
-        s = self._steps[step]
+        s = self._visible_steps()[step]
         err = self._validate(step, value, s)
         if err:
             self.query_one("#step-error", Static).update(err)
             return
         self._values[s.name.lower()] = value
-        if step + 1 < len(self._steps):
+        if s.name == "Livello" and value != "custom":
+            self._values.pop("grado", None)
+        visible_steps = self._visible_steps()
+        if step + 1 < len(visible_steps):
             self.current_step = step + 1
         else:
             self._finish()
 
     def _validate(self, step: int, value: str, s: WizardStep) -> str:
-        if step == 0:  # File
+        if s.name == "File":
             if not value:
                 return "Percorso obbligatorio."
             try:
                 ensure_pdf_input(resolve_user_path(value))
             except PDFToolError as e:
                 return str(e)
-        elif s.choices and value not in s.choices:
-            return f"Scegli tra: {' · '.join(s.choices)}"
+        elif s.name == "Grado":
+            if not value:
+                return "Inserisci un valore tra 1 e 100."
+            if not value.isdigit():
+                return "Il grado personalizzato deve essere numerico."
+            numeric = int(value)
+            if numeric < 1 or numeric > 100:
+                return "Il grado personalizzato deve essere tra 1 e 100."
+        elif s.choices and value not in {choice.value for choice in s.choices}:
+            return f"Scegli tra: {' · '.join(choice.value for choice in s.choices)}"
         return ""
 
     def _finish(self) -> None:
@@ -442,9 +567,12 @@ class WizardScreen(Screen):
                     out_path = out_path.with_suffix(".pdf")
             else:
                 out_path = resolve_incremental_output_path(in_path, ".pdf")
+            level = v.get("livello", "medium")
+            if level == "custom":
+                level = v.get("grado", "50")
             return {
                 "input": in_path,
-                "level": v.get("livello", "medium"),
+                "level": level,
                 "grayscale": v.get("colore", "color") == "gray",
                 "output": out_path,
             }
@@ -594,8 +722,7 @@ class CheckResultScreen(Screen):
         self.app.push_screen(WizardScreen(mode="ocr", prefill_path=str(self._input_path)))
 
     def _go_home(self) -> None:
-        self.app.pop_screen()  # pop CheckResultScreen
-        self.app.pop_screen()  # pop CheckInputScreen
+        _return_to_home(self.app)
 
 
 # ── ProgressScreen (Phase 5) ──────────────────────────────────────────────────
@@ -686,9 +813,11 @@ class ProgressScreen(Screen):
         self.query_one("#footer-bar", Static).update("Invio per tornare al menu")
         self._result_ready = True
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         if self._result_ready and event.key in ("enter", "escape"):
-            self.app.pop_screen()
+            event.stop()
+            event.prevent_default()
+            _return_to_home(self.app)
 
     def action_cancel_op(self) -> None:
         self._cancel_event.set()

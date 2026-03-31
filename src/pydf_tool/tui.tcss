@@ -15,9 +15,31 @@ Screen {
     color: $text;
 }
 
+#home-header {
+    border: solid $border;
+    background: $surface;
+    padding: 1 2;
+    height: auto;
+}
+
+#home-brand {
+    color: $accent;
+    text-style: bold;
+}
+
+#home-subtitle {
+    color: $text;
+    padding-top: 1;
+}
+
+#home-tagline {
+    color: $secondary;
+}
+
 #header {
     color: $accent;
     border: solid $border;
+    background: $surface;
     padding: 1 2;
     height: auto;
     text-style: bold;
@@ -26,28 +48,36 @@ Screen {
 #footer-bar {
     color: $secondary;
     border-top: solid $border;
+    background: $surface;
     padding: 0 2;
     height: auto;
 }
 
 ListView {
-    border: solid $border;
-    background: $surface;
+    background: transparent;
+    scrollbar-size: 0 0;
+    scrollbar-background: $surface;
+    scrollbar-background-hover: $surface;
+    scrollbar-background-active: $surface;
+    scrollbar-color: $secondary;
+    scrollbar-color-hover: $accent;
+    scrollbar-color-active: $accent;
+    scrollbar-corner-color: $surface;
 }
 
 ListView > ListItem {
     color: $text;
     background: $surface-soft;
-    border: solid $border;
-    padding: 1 2;
-    margin: 0 0 1 0;
-    min-height: 5;
+    border: solid $surface-soft;
+    padding: 0 1;
+    margin: 0 1 1 1;
+    min-height: 3;
 }
 
-ListView > ListItem.--highlight {
-    color: $accent;
-    background: $surface-accent;
+ListView > ListItem.-highlight {
+    background: $surface-soft;
     border: solid $accent;
+    color: $text;
 }
 
 #body {
@@ -56,34 +86,52 @@ ListView > ListItem.--highlight {
 }
 
 #menu-panel {
-    width: 40;
+    width: 34;
+    height: 1fr;
     border: solid $border;
-    padding: 1 1 0 1;
+    background: $surface;
+    padding: 0;
 }
 
 #menu-list {
     width: 1fr;
     height: 1fr;
-    border: solid $border;
-    background: $surface;
-}
-
-#menu-list:focus {
-    border: solid $accent;
+    border: none;
+    background: transparent;
+    overflow-y: auto;
+    scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
 }
 
 #preview-panel {
     width: 1fr;
     height: 1fr;
     border: solid $border;
-    padding: 1 2;
     background: $surface;
+    padding: 0;
+}
+
+#preview-copy {
+    height: 1fr;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    scrollbar-size: 1 1;
+    scrollbar-background: $surface;
+    scrollbar-background-hover: $surface;
+    scrollbar-background-active: $surface-soft;
+    scrollbar-color: $border;
+    scrollbar-color-hover: $accent;
+    scrollbar-color-active: $accent;
+    scrollbar-corner-color: $surface;
 }
 
 .panel-title {
     color: $accent;
     text-style: bold;
-    padding: 0 1 1 1;
+    background: $surface-soft;
+    border-bottom: solid $border;
+    padding: 0 1;
+    height: auto;
 }
 
 .menu-item-title {
@@ -93,32 +141,34 @@ ListView > ListItem.--highlight {
 
 .menu-item-summary {
     color: $secondary;
-    margin-top: 1;
 }
 
-ListView > ListItem.--highlight .menu-item-title {
+ListView > ListItem.-highlight .menu-item-title {
     color: $accent;
 }
 
-ListView > ListItem.--highlight .menu-item-summary {
+ListView > ListItem.-highlight .menu-item-summary {
     color: $text;
 }
 
 #preview-title {
     color: $accent;
     text-style: bold;
-    padding-bottom: 1;
+    padding: 1 1 0 1;
 }
 
 #preview-body {
     color: $text;
     height: 1fr;
+    padding: 1 1 0 1;
+    text-wrap: wrap;
 }
 
 #preview-hint {
     color: $secondary;
     border-top: solid $border;
-    padding-top: 1;
+    background: $surface-soft;
+    padding: 1 1 0 1;
 }
 
 .step-indicator {
@@ -147,7 +197,7 @@ ProgressBar Bar {
 }
 
 Button {
-    border: solid $border;
+    border: solid $surface-soft;
     background: $surface-soft;
     color: $text;
     margin: 1 1 0 1;
@@ -157,18 +207,16 @@ Button {
 Button:focus {
     color: $accent;
     border: solid $accent;
-    background: $surface-accent;
+    background: $surface-soft;
 }
 
 #btn-run-ocr {
-    background: $accent;
-    color: black;
     text-style: bold;
 }
 
 #btn-run-ocr:focus {
-    background: $accent;
-    color: black;
+    background: $surface-soft;
+    color: $accent;
     border: solid $accent;
 }
 
@@ -176,6 +224,9 @@ HelpScreen > ScrollableContainer {
     border: solid $border;
     padding: 1 2;
     background: $surface;
+    overflow-y: auto;
+    scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
 }
 
 #wizard-title {
@@ -194,6 +245,37 @@ HelpScreen > ScrollableContainer {
 #step-prompt {
     color: $text;
     padding: 1 2 0 2;
+}
+
+#step-input {
+    margin: 0 2;
+}
+
+Input {
+    background: $surface-soft;
+    color: $text;
+    border: solid $border;
+    padding: 0 1;
+    height: 3;
+    scrollbar-size-horizontal: 0;
+    scrollbar-size-vertical: 0;
+}
+
+Input:focus {
+    background: $surface-soft;
+    border: solid $accent;
+}
+
+#step-choices {
+    margin: 0 2;
+    border: solid $border;
+    background: $surface;
+    height: auto;
+    max-height: 12;
+}
+
+#step-choices > ListItem {
+    min-height: 2;
 }
 
 #result-table {
