@@ -31,11 +31,6 @@ from .utils import (
 
 EXIT_COMMANDS = {"exit", "quit", ":q"}
 
-_HEADER_TEXT = """\
-╠══ PyDF Tool ══╣
-launcher TUI per OCR, compressione e supporto
-scegli uno strumento per continuare"""
-
 _OCR_HEADER_TEXT = """\
 OCR
 verifica un PDF oppure avvia subito l'OCR guidato

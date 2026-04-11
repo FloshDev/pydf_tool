@@ -293,7 +293,6 @@ def compress_pdf(
                 f"Scrittura del file compresso fallita: {destination}"
             ) from exc
 
-        destination = resolve_user_path(destination)
         size_after = destination.stat().st_size
         _emit_progress(
             progress_callback,

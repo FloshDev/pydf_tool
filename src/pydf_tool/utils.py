@@ -101,7 +101,6 @@ def human_size(num_bytes: int) -> str:
         if value < 1024 or unit == units[-1]:
             return f"{value:.2f} {unit}"
         value /= 1024
-    return f"{num_bytes} B"
 
 
 def format_size_change(size_before: int, size_after: int) -> str:

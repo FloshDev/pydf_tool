@@ -171,16 +171,6 @@ ListView > ListItem.-highlight .menu-item-summary {
     padding: 1 1 0 1;
 }
 
-.step-indicator {
-    color: $secondary;
-    padding: 0 2;
-}
-
-.step-indicator .active {
-    color: $accent;
-    text-style: bold;
-}
-
 .error-label {
     color: $error;
     padding: 0 2;
@@ -212,12 +202,6 @@ Button:focus {
 
 #btn-run-ocr {
     text-style: bold;
-}
-
-#btn-run-ocr:focus {
-    background: $surface-soft;
-    color: $accent;
-    border: solid $accent;
 }
 
 HelpScreen > ScrollableContainer {
