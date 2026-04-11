@@ -58,7 +58,7 @@ _HOME_MENU_ITEMS: list[MenuEntry] = [
     MenuEntry(
         key="ocr-menu",
         title="OCR",
-        summary="Verifica un PDF o avvia l'OCR guidato.",
+        summary="Verifica testo estraibile o esegui l'OCR guidato.",
         preview_title="Suite OCR",
         preview_body=(
             "Apri il sottomenu OCR.\n"
@@ -255,7 +255,7 @@ class HomeScreen(MenuScreen):
         with Vertical(id="home-header"):
             yield Static("╠══ PyDF Tool ══╣", id="home-brand")
             yield Static(
-                "launcher TUI per OCR, compressione e supporto",
+                "tool da terminale per operazioni su PDF",
                 id="home-subtitle",
             )
             yield Static("scegli uno strumento per continuare", id="home-tagline")
