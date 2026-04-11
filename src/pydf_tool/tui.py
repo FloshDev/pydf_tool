@@ -214,9 +214,38 @@ class WizardChoiceItem(ListItem):
             yield Static(self.choice.summary, classes="menu-item-summary")
 
 
+# ── MenuScreen ────────────────────────────────────────────────────────────────
+
+class MenuScreen(Screen):
+    """Base class per schermate con pannello menu + pannello preview."""
+
+    _menu_items: list[MenuEntry] = []
+
+    def _set_preview(self, action_id: str) -> None:
+        entry = next((item for item in self._menu_items if item.key == action_id), None)
+        if entry is None:
+            return
+        self.query_one("#preview-title", Static).update(entry.preview_title)
+        self.query_one("#preview-body", Static).update(entry.preview_body)
+        self.query_one("#preview-hint", Static).update(entry.preview_hint)
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.item is not None:
+            self._set_preview(event.item.id)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.item is not None:
+            self._dispatch_action(event.item.id)
+
+    def _dispatch_action(self, action_id: str) -> None:
+        raise NotImplementedError
+
+
 # ── HomeScreen ────────────────────────────────────────────────────────────────
 
-class HomeScreen(Screen):
+class HomeScreen(MenuScreen):
+    _menu_items = _HOME_MENU_ITEMS
+
     BINDINGS = [
         Binding("q", "quit_app", "Esci"),
         Binding("escape", "quit_app", "Esci"),
@@ -251,22 +280,6 @@ class HomeScreen(Screen):
         self._set_preview(_HOME_MENU_ITEMS[0].key)
         self.query_one("#menu-list", ListView).focus()
 
-    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        if event.item is not None:
-            self._set_preview(event.item.id)
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.item is not None:
-            self._dispatch_action(event.item.id)
-
-    def _set_preview(self, action_id: str) -> None:
-        entry = next((item for item in _HOME_MENU_ITEMS if item.key == action_id), None)
-        if entry is None:
-            return
-        self.query_one("#preview-title", Static).update(entry.preview_title)
-        self.query_one("#preview-body", Static).update(entry.preview_body)
-        self.query_one("#preview-hint", Static).update(entry.preview_hint)
-
     def _dispatch_action(self, action_id: str) -> None:
         if action_id == "ocr-menu":
             self.app.push_screen(OCRMenuScreen())
@@ -282,7 +295,9 @@ class HomeScreen(Screen):
         self.app.push_screen(HelpScreen())
 
 
-class OCRMenuScreen(Screen):
+class OCRMenuScreen(MenuScreen):
+    _menu_items = _OCR_MENU_ITEMS
+
     BINDINGS = [
         Binding("escape", "go_back", "Indietro"),
         Binding("h", "push_help", "Help"),
@@ -309,22 +324,6 @@ class OCRMenuScreen(Screen):
     def on_mount(self) -> None:
         self._set_preview(_OCR_MENU_ITEMS[0].key)
         self.query_one("#menu-list", ListView).focus()
-
-    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        if event.item is not None:
-            self._set_preview(event.item.id)
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.item is not None:
-            self._dispatch_action(event.item.id)
-
-    def _set_preview(self, action_id: str) -> None:
-        entry = next((item for item in _OCR_MENU_ITEMS if item.key == action_id), None)
-        if entry is None:
-            return
-        self.query_one("#preview-title", Static).update(entry.preview_title)
-        self.query_one("#preview-body", Static).update(entry.preview_body)
-        self.query_one("#preview-hint", Static).update(entry.preview_hint)
 
     def _dispatch_action(self, action_id: str) -> None:
         if action_id == "check":
