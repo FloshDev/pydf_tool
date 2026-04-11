@@ -195,20 +195,25 @@ Button {
 }
 
 Button:focus {
+    text-style: bold;
     color: $accent;
     border: solid $accent;
     border-top: solid $accent;
     border-bottom: solid $accent;
     background: $surface-soft;
+    background-tint: 0%;
 }
 
 #btn-run-ocr {
     text-style: bold;
 }
 
-/* Selettore con ID parent — specificità (0,1,1,1) batte Button.-style-default:focus (0,0,2,1) */
+/* In Textual il focus dei Button default applica anche reverse + background-tint.
+   Qui li neutralizziamo nel blocco risultato con specificità più alta. */
 #result-buttons Button:focus {
+    text-style: bold;
     background: $surface-soft;
+    background-tint: 0%;
     color: $accent;
     border: solid $accent;
     border-top: solid $accent;

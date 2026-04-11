@@ -304,6 +304,31 @@ class TUIScreenTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_ocr_wizard_format_step_highlights_first_option_immediately(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="ocr", prefill_path="/tmp/input.pdf")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                await pilot.press("enter")
+                await pilot.pause()
+
+                self.assertEqual(wizard.current_step, 1)
+                self.assertEqual(app.focused.id if app.focused else None, "step-choices")
+
+                choice_list = wizard.query_one("#step-choices", ListView)
+                self.assertEqual(
+                    choice_list.highlighted_child.choice.value if choice_list.highlighted_child else None,
+                    "pdf",
+                )
+
+                first_item = list(choice_list.query("ListItem"))[0]
+                self.assertIn("-highlight", first_item.classes)
+
+        asyncio.run(scenario())
+
     def test_prefilled_ocr_wizard_skips_file_step(self) -> None:
         async def scenario() -> None:
             app = self._make_app()
@@ -315,6 +340,24 @@ class TUIScreenTestCase(unittest.TestCase):
                 self.assertEqual(wizard._values["file"], "/tmp/input.pdf")
                 self.assertEqual([step.name for step in wizard._visible_steps()], ["Lingua", "Formato", "Output"])
                 self.assertEqual(app.focused.id if app.focused else None, "step-choices")
+
+        asyncio.run(scenario())
+
+    def test_ocr_output_placeholder_mentions_same_source_folder_and_selected_extension(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="ocr", prefill_path="/tmp/input.pdf")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values["formato"] = "txt"
+                wizard.current_step = 2
+                await pilot.pause()
+
+                input_widget = wizard.query_one("#step-input", Input)
+                self.assertIn("stessa cartella del file di partenza", input_widget.placeholder)
+                self.assertIn("out.txt", input_widget.placeholder)
 
         asyncio.run(scenario())
 
@@ -349,6 +392,26 @@ class TUIScreenTestCase(unittest.TestCase):
 
                 self.assertEqual(wizard._values["grado"], "42")
                 self.assertEqual(wizard.current_step, 3)
+
+        asyncio.run(scenario())
+
+    def test_compress_output_placeholder_mentions_same_source_folder(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="compress")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values["file"] = "/tmp/input.pdf"
+                wizard._values["livello"] = "medium"
+                wizard._values["colore"] = "color"
+                wizard.current_step = 3
+                await pilot.pause()
+
+                input_widget = wizard.query_one("#step-input", Input)
+                self.assertIn("stessa cartella del file di partenza", input_widget.placeholder)
+                self.assertIn("out.pdf", input_widget.placeholder)
 
         asyncio.run(scenario())
 
@@ -387,6 +450,33 @@ class TUIScreenTestCase(unittest.TestCase):
                 await pilot.press("left")
                 await pilot.pause()
                 self.assertEqual(app.focused.id if app.focused else None, "btn-run-ocr")
+
+        asyncio.run(scenario())
+
+    def test_check_result_home_button_focus_does_not_use_reverse_style(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                app.push_screen(
+                    CheckResultScreen(
+                        result=CheckOCRResult(
+                            pages_total=1,
+                            pages_with_text=0,
+                            pages_without_text=1,
+                            chars_per_page_avg=0.0,
+                            verdict="ocr_needed",
+                        ),
+                        input_path=Path("scan.pdf"),
+                    )
+                )
+                await pilot.pause()
+
+                await pilot.press("down")
+                await pilot.pause()
+
+                button = app.screen.query_one("#btn-home")
+                self.assertFalse(button.styles.text_style.reverse)
+                self.assertEqual(button.styles.background_tint.a, 0)
 
         asyncio.run(scenario())
 

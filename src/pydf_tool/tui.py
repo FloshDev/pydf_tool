@@ -370,7 +370,11 @@ _WIZARD_STEPS: dict[str, list[WizardStep]] = {
                 WizardChoice("txt", "Testo TXT", "Esporta solo il testo estratto."),
             ],
         ),
-        WizardStep("Output",  "Percorso file di output:",           "es. ~/Desktop/out.pdf (vuoto = automatico)"),
+        WizardStep(
+            "Output",
+            "Percorso file di output:",
+            "es. ~/Desktop/out.pdf (vuoto = stessa cartella del file di partenza)",
+        ),
     ],
     "compress": [
         WizardStep("File",    "Percorso del PDF da comprimere:",   "es. ~/Documents/doc.pdf"),
@@ -395,7 +399,11 @@ _WIZARD_STEPS: dict[str, list[WizardStep]] = {
                 WizardChoice("gray", "Scala di grigi", "Riduce il peso convertendo in grigio."),
             ],
         ),
-        WizardStep("Output",  "Percorso file di output:",           "es. ~/Desktop/out.pdf (vuoto = automatico)"),
+        WizardStep(
+            "Output",
+            "Percorso file di output:",
+            "es. ~/Desktop/out.pdf (vuoto = stessa cartella del file di partenza)",
+        ),
     ],
 }
 
@@ -460,30 +468,59 @@ class WizardScreen(Screen):
         if current.choices:
             inp.display = False
             choice_list.display = True
-            choice_list.clear()
-            choice_list.extend([WizardChoiceItem(choice) for choice in current.choices])
             selected_value = self._values.get(current.name.lower(), current.choices[0].value)
-            choice_list.focus()
-            self.call_after_refresh(self._focus_choice_value, selected_value)
+            self._populate_choice_list(current.choices, selected_value)
             self.query_one("#footer-bar", Static).update(_FOOTER_WIZARD_CHOICE)
         else:
             choice_list.display = False
             inp.display = True
-            inp.placeholder = current.placeholder
+            inp.placeholder = self._resolve_input_placeholder(current)
             inp.value = self._values.get(current.name.lower(), "")
             inp.focus()
             self.query_one("#footer-bar", Static).update(_FOOTER_WIZARD_INPUT)
         self.query_one("#step-error", Static).update("")
 
+    def _resolve_input_placeholder(self, step: WizardStep) -> str:
+        if self._mode == "ocr" and step.name == "Output":
+            extension = ".txt" if self._values.get("formato") == "txt" else ".pdf"
+            return (
+                f"es. ~/Desktop/out{extension} "
+                "(vuoto = stessa cartella del file di partenza)"
+            )
+        return step.placeholder
+
     def _focus_choice_value(self, value: str) -> None:
         step = self._visible_steps()[self.current_step]
         choices = step.choices or []
         choice_list = self.query_one("#step-choices", ListView)
-        choice_list.index = next(
+        selected_index = next(
             (index for index, choice in enumerate(choices) if choice.value == value),
             0,
         )
+        choice_list.index = None
+        choice_list.index = selected_index
         choice_list.focus()
+
+    def _sync_choice_highlight_class(self) -> None:
+        choice_list = self.query_one("#step-choices", ListView)
+        for item in choice_list.query("ListItem"):
+            assert isinstance(item, ListItem)
+            item.highlighted = False
+        highlighted_child = choice_list.highlighted_child
+        if highlighted_child is not None:
+            highlighted_child.highlighted = True
+
+    @work(exclusive=True, group="wizard-choice-list")
+    async def _populate_choice_list(
+        self,
+        choices: list[WizardChoice],
+        selected_value: str,
+    ) -> None:
+        choice_list = self.query_one("#step-choices", ListView)
+        await choice_list.clear()
+        await choice_list.extend([WizardChoiceItem(choice) for choice in choices])
+        self._focus_choice_value(selected_value)
+        self._sync_choice_highlight_class()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self._advance(event.value.strip())
