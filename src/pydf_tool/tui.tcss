@@ -204,6 +204,12 @@ Button:focus {
     text-style: bold;
 }
 
+#btn-home:focus {
+    background: $surface-soft;
+    color: $accent;
+    border: solid $accent;
+}
+
 HelpScreen > ScrollableContainer {
     border: solid $border;
     padding: 1 2;
