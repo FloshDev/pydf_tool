@@ -36,6 +36,26 @@ from pydf_tool.tui import (
 from pydf_tool.utils import ensure_pdf_input, resolve_user_path
 
 
+class EmitProgressTestCase(unittest.TestCase):
+    def test_emit_progress_is_exported_from_progress_module(self) -> None:
+        from pydf_tool.progress import emit_progress
+        self.assertTrue(callable(emit_progress))
+
+    def test_emit_progress_calls_callback_with_correct_fields(self) -> None:
+        from pydf_tool.progress import emit_progress, OperationProgress
+        calls: list[OperationProgress] = []
+        emit_progress(calls.append, stage="ocr", message="ciao", completed=3, total=10)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].stage, "ocr")
+        self.assertEqual(calls[0].message, "ciao")
+        self.assertEqual(calls[0].completed, 3)
+        self.assertEqual(calls[0].total, 10)
+
+    def test_emit_progress_skips_none_callback(self) -> None:
+        from pydf_tool.progress import emit_progress
+        emit_progress(None, stage="done", message="ok")  # nessuna eccezione
+
+
 class CheckOCRTestCase(unittest.TestCase):
     def _make_fake_reader(self, texts_per_page: list[str]):
         class FakePage:

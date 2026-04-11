@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import PDFToolError
-from .progress import OperationProgress
+from .progress import OperationProgress, emit_progress
 from .utils import (
     ensure_distinct_paths,
     ensure_pdf_input,
@@ -39,26 +39,6 @@ class CompressionResult:
     grayscale: bool
     size_before: int
     size_after: int
-
-
-def _emit_progress(
-    callback: Callable[[OperationProgress], None] | None,
-    *,
-    stage: str,
-    message: str,
-    completed: int = 0,
-    total: int | None = None,
-) -> None:
-    if callback is None:
-        return
-    callback(
-        OperationProgress(
-            stage=stage,
-            message=message,
-            completed=completed,
-            total=total,
-        )
-    )
 
 
 def resolve_compression_profile(level: str) -> CompressionProfile:
@@ -142,7 +122,7 @@ def compress_pdf(
         except Exception:
             page_count = None
 
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="prepare",
             message=(
@@ -227,7 +207,7 @@ def compress_pdf(
                     stderr=subprocess.STDOUT,
                     text=True,
                 )
-                _emit_progress(
+                emit_progress(
                     progress_callback,
                     stage="compress",
                     message=(
@@ -244,7 +224,7 @@ def compress_pdf(
                         match = re.search(r"\bPage\s+(\d+)\b", line)
                         if match:
                             current_page = int(match.group(1))
-                            _emit_progress(
+                            emit_progress(
                                 progress_callback,
                                 stage="compress",
                                 message=(
@@ -294,7 +274,7 @@ def compress_pdf(
             ) from exc
 
         size_after = destination.stat().st_size
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="done",
             message="Compressione completata",

@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 
 from .errors import PDFToolError
-from .progress import OperationProgress
+from .progress import OperationProgress, emit_progress
 from .utils import (
     ensure_distinct_paths,
     ensure_pdf_input,
@@ -28,26 +28,6 @@ class OCRResult:
     output_path: Path
     pages: int
     output_type: str
-
-
-def _emit_progress(
-    callback: Callable[[OperationProgress], None] | None,
-    *,
-    stage: str,
-    message: str,
-    completed: int = 0,
-    total: int | None = None,
-) -> None:
-    if callback is None:
-        return
-    callback(
-        OperationProgress(
-            stage=stage,
-            message=message,
-            completed=completed,
-            total=total,
-        )
-    )
 
 
 def resolve_tesseract_languages(lang: str) -> str:
@@ -118,7 +98,7 @@ def run_ocr(
     except Exception:
         page_count = None
 
-    _emit_progress(
+    emit_progress(
         progress_callback,
         stage="prepare",
         message="Analisi del PDF",
@@ -150,7 +130,7 @@ def run_ocr(
     # Se page_count è None (PdfReader ha fallito), si ricade nel percorso batch originale.
 
     if page_count is not None:
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="ocr",
             message=f"OCR pronto: 0/{page_count} pagine",
@@ -193,7 +173,7 @@ def run_ocr(
                     del image
                 page_header = f"--- Pagina {page_num} ---"
                 page_texts.append(page_header if not text else f"{page_header}\n{text}")
-                _emit_progress(
+                emit_progress(
                     progress_callback,
                     stage="ocr",
                     message=f"OCR pagina {page_num}/{page_count}",
@@ -201,7 +181,7 @@ def run_ocr(
                     total=page_count,
                 )
 
-            _emit_progress(
+            emit_progress(
                 progress_callback,
                 stage="finalize",
                 message="Scrittura output testuale",
@@ -209,7 +189,7 @@ def run_ocr(
                 total=page_count,
             )
             destination.write_text("\n\n".join(page_texts) + "\n", encoding="utf-8")
-            _emit_progress(
+            emit_progress(
                 progress_callback,
                 stage="done",
                 message="OCR completato",
@@ -256,7 +236,7 @@ def run_ocr(
                 ) from exc
             finally:
                 del image
-            _emit_progress(
+            emit_progress(
                 progress_callback,
                 stage="ocr",
                 message=f"OCR pagina {page_num}/{page_count}",
@@ -264,7 +244,7 @@ def run_ocr(
                 total=page_count,
             )
 
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="finalize",
             message="Scrittura PDF ricercabile",
@@ -279,7 +259,7 @@ def run_ocr(
                 f"Scrittura del file OCR fallita: {destination}"
             ) from exc
 
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="done",
             message="OCR completato",
@@ -289,7 +269,7 @@ def run_ocr(
         return OCRResult(output_path=destination, pages=page_count, output_type="pdf")
 
     # Percorso batch (fallback): page_count sconosciuto, carica tutto in memoria.
-    _emit_progress(
+    emit_progress(
         progress_callback,
         stage="render",
         message="Rendering pagine con Poppler",
@@ -307,7 +287,7 @@ def run_ocr(
         raise PDFToolError("Nessuna pagina convertita dal PDF di input.")
 
     page_count = len(images)
-    _emit_progress(
+    emit_progress(
         progress_callback,
         stage="ocr",
         message=f"OCR pronto: 0/{page_count} pagine",
@@ -329,7 +309,7 @@ def run_ocr(
             page_texts_batch.append(
                 page_header if not text else f"{page_header}\n{text}"
             )
-            _emit_progress(
+            emit_progress(
                 progress_callback,
                 stage="ocr",
                 message=f"OCR pagina {index}/{page_count}",
@@ -338,7 +318,7 @@ def run_ocr(
             )
 
         del images
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="finalize",
             message="Scrittura output testuale",
@@ -346,7 +326,7 @@ def run_ocr(
             total=page_count,
         )
         destination.write_text("\n\n".join(page_texts_batch) + "\n", encoding="utf-8")
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="done",
             message="OCR completato",
@@ -370,7 +350,7 @@ def run_ocr(
                 f"Generazione del PDF OCR fallita sulla pagina {index}. "
                 "Verifica il PDF di input e l'installazione OCR."
             ) from exc
-        _emit_progress(
+        emit_progress(
             progress_callback,
             stage="ocr",
             message=f"OCR pagina {index}/{page_count}",
@@ -379,7 +359,7 @@ def run_ocr(
         )
 
     del images
-    _emit_progress(
+    emit_progress(
         progress_callback,
         stage="finalize",
         message="Scrittura PDF ricercabile",
@@ -392,7 +372,7 @@ def run_ocr(
     except Exception as exc:
         raise PDFToolError(f"Scrittura del file OCR fallita: {destination}") from exc
 
-    _emit_progress(
+    emit_progress(
         progress_callback,
         stage="done",
         message="OCR completato",
