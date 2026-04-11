@@ -242,7 +242,7 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 
 ### Verificato in questa fase
 
-- suite test verde: `43` test
+- suite test verde: `46` test (dopo Task 1-4 del cleanup 2026-04-11)
 - import e runtime verificati dentro `.venv`
 - struttura docs/spec/plan presente e leggibile
 - launcher TUI verificato con home, sottomenu OCR e focus pulsanti
@@ -258,14 +258,26 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 - compressione con staging e supporto path Unicode
 - naming incrementale degli output
 
-### Fix applicati (2026-04-11) — Cleanup & Refactoring
+### Fix applicati (2026-04-11) — Cleanup & Refactoring (IN CORSO)
 
-Task completati (subagent-driven):
+Piano: `docs/superpowers/plans/2026-04-11-cleanup-refactor-plan.md`
+Spec: `docs/superpowers/specs/2026-04-11-cleanup-refactor-design.md`
 
-- **Task 1 completato**: rimosso `_HEADER_TEXT` (tui.py), return irraggiungibile in `human_size` (utils.py), regole CSS `.step-indicator` e `#btn-run-ocr:focus` (tui.tcss), `resolve_user_path` ridondante (compress.py). Suite test: 43/43 verde.
-- **Task 2 completato**: `_emit_progress` spostata in `progress.py` come `emit_progress` pubblica; rimossa da `ocr.py` e `compress.py`; 3 nuovi test aggiunti (totale test: 46).
-- **Task 3 completato**: creata `MenuScreen(Screen)` base class; `HomeScreen` e `OCRMenuScreen` la subclassano; rimossi 3 metodi duplicati per classe.
-- **Task 4 completato**: rimossi `parser_factory`/`executor` da `PyDFApp.__init__` e `run_interactive_app`; aggiornati `cli.py` e i test.
+Task completati (subagent-driven, 46 test verdi):
+
+- **Task 1 ✅**: rimosso `_HEADER_TEXT` (tui.py), return irraggiungibile in `human_size` (utils.py), regole CSS `.step-indicator` e `#btn-run-ocr:focus` (tui.tcss), `resolve_user_path` ridondante (compress.py).
+- **Task 2 ✅**: `_emit_progress` spostata in `progress.py` come `emit_progress` pubblica; rimossa da `ocr.py` e `compress.py`; 3 nuovi test (totale: 46).
+- **Task 3 ✅**: `MenuScreen(Screen)` base class; `HomeScreen` e `OCRMenuScreen` la subclassano; rimossi 3 metodi duplicati per classe.
+- **Task 4 ✅**: rimossi `parser_factory`/`executor` da `PyDFApp.__init__` e `run_interactive_app`; aggiornati `cli.py` e i test.
+
+Task da completare nella prossima sessione (+5 test attesi, totale finale 51):
+
+- **Task 5**: `ProgressScreen` footer mostra "Ctrl+C per annullare" fin dal mount (non stringa vuota)
+- **Task 6**: `WizardScreen` — aggiungere binding H/F1 per help + clamp `action_go_back`
+- **Task 7**: `HelpScreen` — footer come `Static` widget separato fuori da `ScrollableContainer`
+- **Task 8**: `_launch_ocr` — 3 pop invece di 2 per rimuovere anche `OCRMenuScreen` dallo stack
+
+Per riprendere: leggere il piano, istanziare subagent-driven-development dal Task 5.
 
 ### Ultima sessione Codex
 
