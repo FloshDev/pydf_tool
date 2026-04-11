@@ -102,7 +102,7 @@ Nota UX verificata:
 
 Cartelle locali comunemente presenti ma non tracciate: `.superpowers/`, `PDF Sample/`.
 
-Numero test attuale: `43` test `unittest` in `tests/test_cli.py`.
+Numero test attuale: `46` test `unittest` in `tests/test_cli.py`.
 
 ---
 
@@ -263,6 +263,7 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 Task completati (subagent-driven):
 
 - **Task 1 completato**: rimosso `_HEADER_TEXT` (tui.py), return irraggiungibile in `human_size` (utils.py), regole CSS `.step-indicator` e `#btn-run-ocr:focus` (tui.tcss), `resolve_user_path` ridondante (compress.py). Suite test: 43/43 verde.
+- **Task 2 completato**: `_emit_progress` spostata in `progress.py` come `emit_progress` pubblica; rimossa da `ocr.py` e `compress.py`; 3 nuovi test aggiunti (totale test: 46).
 
 ### Ultima sessione Codex
 
@@ -328,7 +329,6 @@ File toccati in questa sessione:
 
 ### Debito tecnico leggero
 
-- `_emit_progress` è duplicata in `ocr.py` e `compress.py`
 - `ProgressScreen` ha un `elapsed-label` presente ma non aggiornato
 
 ---
