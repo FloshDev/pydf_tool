@@ -36,6 +36,12 @@ tmp/
 .claude/
 .superpowers/
 
+# Internal project documentation (not for public repo)
+GUIDA_CODICE.md
+PROJECT_CONTEXT.md
+COMPONENTS.md
+docs/
+
 # Manual sample files
 PDF Sample/
 
