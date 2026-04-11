@@ -233,12 +233,14 @@ La TUI non usa più `prompt_toolkit` e `rich` come framework separati. Dopo la m
 La struttura attuale è questa:
 
 - `PyDFApp` è la classe principale `textual.App`
-- `HomeScreen` mostra il menu principale e il pannello anteprima
-- `WizardScreen` guida l'utente nei flussi OCR e compressione
+- `MenuScreen(Screen)` è la base class condivisa tra `HomeScreen` e `OCRMenuScreen`: centralizza `_set_preview`, `on_list_view_highlighted` e `on_list_view_selected`
+- `HomeScreen(MenuScreen)` mostra il menu principale e il pannello anteprima
+- `OCRMenuScreen(MenuScreen)` mostra il sottomenu OCR (Verifica / Esegui / Torna)
+- `WizardScreen` guida l'utente nei flussi OCR e compressione; supporta H/F1 per l'help
 - `CheckInputScreen` raccoglie il path da analizzare
 - `CheckResultScreen` mostra il verdetto di `check_ocr()`
-- `ProgressScreen` esegue OCR o compressione in un worker thread
-- `HelpScreen` mostra l'help come modal overlay
+- `ProgressScreen` esegue OCR o compressione in un worker thread; il footer parte sempre con "Ctrl+C per annullare"
+- `HelpScreen` mostra l'help come modal overlay; ha un widget `#footer-bar` separato fuori dallo `ScrollableContainer`
 
 Il vantaggio architetturale è importante: non c'è più alternanza tra framework incompatibili sullo stesso terminale. Layout, dialog e progress appartengono tutti allo stesso event loop.
 
@@ -494,7 +496,7 @@ Il `PROJECT_CONTEXT.md` tiene traccia dei limiti ancora aperti. I più important
 
 **OCR non interrompibile dentro la singola pagina**: Tesseract lavora in codice C. Python può fermare il flusso tra una pagina e l'altra, ma non entrare nel mezzo di una chiamata OCR già partita. La TUI resta responsiva, ma la cancellazione non è istantanea su pagine pesanti.
 
-**Gap nei test sulla TUI**: i test attuali coprono bene helper, parser e backend mockato, ma non esercitano davvero i flow Textual a livello schermata/widget. La parte più nuova del progetto è quindi anche quella meno blindata.
+**Gap nei test sulla TUI**: i test attuali (51 totali) coprono navigation, wizard, check result e progress screen. Restano scoperti i test end-to-end con Tesseract o Ghostscript reali e il flusso completo `check → run ocr` via Textual pilot.
 
 **Fragilità del setup**: il pacchetto dichiara supporto `Python 3.10+`, ma `setup.sh` oggi patcha il wrapper puntando a `.venv/bin/python3.12`. È il workflow verificato, ma non è ancora un setup completamente agnostico rispetto alla minor version.
 
@@ -511,3 +513,17 @@ Se le dipendenze Python cambiano dopo un `pip install -e .`: riapplica il patch 
 Se i test falliscono: esegui `source .venv/bin/activate` e poi `PYTHONPATH=src python -m unittest discover -s tests -v` dalla root del progetto. Il comando con `python3` di sistema può fallire semplicemente perché `textual` non è installato globalmente.
 
 Se vuoi capire cosa fa un pezzo di codice specifico: il modo più veloce è aggiungere un `print()` temporaneo, eseguire il comando reale, e osservare l'output. Non è elegante, ma funziona. Per qualcosa di più sistematico, `python3 -m pdb` è il debugger interattivo di Python.
+
+---
+
+## 15. Note su Textual 8.x — Differenze importanti dall'API pubblica
+
+Se scrivi test Textual o ispezioni widget a runtime, tieni a mente queste differenze rispetto a versioni precedenti o a documentazione generica online.
+
+**`Static.content` non è `Static.renderable`**: in Textual 8.x, il testo di un widget `Static` si legge tramite la property `.content` (stringa). L'attributo `.renderable` non esiste in questa versione.
+
+**Stack schermata inizia a 2**: `len(app.screen_stack)` dopo il mount restituisce 2, non 1. Textual 8.x monta una DefaultScreen interna prima che `on_mount` pushes `HomeScreen`. Considera sempre questo offset quando scrivi assert sulla profondità dello stack.
+
+**Binding su Screen vs widget con focus**: i binding dichiarati a livello di `Screen` (`BINDINGS = [...]`) vengono gestiti solo se il widget in focus non intercetta il tasto prima. Un `Input` intercetta tutti i caratteri (inclusa 'h'). Una `ListView` non intercetta lettere arbitrarie, quindi i binding della schermata funzionano normalmente.
+
+**`_launch_ocr` e stack**: il flusso `HomeScreen → OCRMenuScreen → CheckInputScreen → CheckResultScreen → WizardScreen` richiede 3 pop in `_launch_ocr` (non 2) per eliminare anche `OCRMenuScreen` dallo stack. Altrimenti premendo Esc dal wizard si finisce nell'OCRMenuScreen invece che nella home.

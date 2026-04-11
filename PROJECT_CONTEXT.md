@@ -102,7 +102,7 @@ Nota UX verificata:
 
 Cartelle locali comunemente presenti ma non tracciate: `.superpowers/`, `PDF Sample/`.
 
-Numero test attuale: `46` test `unittest` in `tests/test_cli.py`.
+Numero test attuale: `51` test `unittest` in `tests/test_cli.py`.
 
 ---
 
@@ -270,14 +270,13 @@ Task completati (subagent-driven, 46 test verdi):
 - **Task 3 ✅**: `MenuScreen(Screen)` base class; `HomeScreen` e `OCRMenuScreen` la subclassano; rimossi 3 metodi duplicati per classe.
 - **Task 4 ✅**: rimossi `parser_factory`/`executor` da `PyDFApp.__init__` e `run_interactive_app`; aggiornati `cli.py` e i test.
 
-Task da completare nella prossima sessione (+5 test attesi, totale finale 51):
+Tutti e 8 i task sono stati completati. Stato finale: **51 test verdi**.
 
-- **Task 5**: `ProgressScreen` footer mostra "Ctrl+C per annullare" fin dal mount (non stringa vuota)
-- **Task 6**: `WizardScreen` — aggiungere binding H/F1 per help + clamp `action_go_back`
-- **Task 7**: `HelpScreen` — footer come `Static` widget separato fuori da `ScrollableContainer`
-- **Task 8**: `_launch_ocr` — 3 pop invece di 2 per rimuovere anche `OCRMenuScreen` dallo stack
+### Note tecniche (Textual 8.x)
 
-Per riprendere: leggere il piano, istanziare subagent-driven-development dal Task 5.
+- `Static.renderable` non esiste — usare `.content` (property pubblica)
+- Lo stack include una DefaultScreen interna: `len(screen_stack)` inizia a 2
+- Il binding 'h' funziona solo quando il focus è su ListView, non su Input
 
 ### Ultima sessione Codex
 
