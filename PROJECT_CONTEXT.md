@@ -68,6 +68,14 @@ Nota UX verificata:
 - il focus dei pulsanti in `CheckResultScreen` è coerente: niente sfondo giallo pieno su `Torna al menu`
 - nei passi a scelta del wizard la prima opzione risulta evidenziata subito, incluso `Formato` dopo `Lingua`
 - nei passi `Output`, lasciare il campo vuoto significa salvare nella stessa cartella del file di partenza
+- nei passi `File` di OCR/compressione e nella schermata `check` si può aprire Finder con `F2` oppure col pulsante dedicato
+- nei passi `File` di OCR/compressione e nella schermata `check` il focus passa tra input e pulsante Finder anche con `↑↓` e `Tab`
+- dopo una selezione via Finder il focus torna automaticamente sul campo percorso, così `Invio` successivo conferma il path invece di riaprire il picker
+- all'avvio l'app mostra un modal se mancano prerequisiti esterni (`tesseract`, `poppler`, `ghostscript`)
+- OCR e compressione vengono bloccati in TUI con messaggio esplicito se mancano i tool necessari
+- al termine di OCR/compressione la schermata finale offre pulsanti `Apri file`, `Apri cartella`, `Torna al menu`
+- i wizard usano preferenze persistenti per ultima cartella, lingua OCR e livello compressione
+- il sottomenu `OCR` usa ora un layout compatto coerente col wizard, senza hero grande né dashboard a doppio pannello
 
 ---
 
@@ -90,21 +98,28 @@ Nota UX verificata:
 │       ├── __init__.py
 │       ├── __main__.py
 │       ├── cli.py
+│       ├── macos_integration.py
+│       ├── preferences.py
 │       ├── tui.py
 │       ├── tui.tcss
 │       ├── ocr.py
 │       ├── compress.py
 │       ├── check_ocr.py
 │       ├── progress.py
+│       ├── system_checks.py
 │       ├── utils.py
 │       └── errors.py
 ├── tests/
-│   └── test_cli.py
+│   ├── test_cli.py
+│   ├── test_macos_integration.py
+│   ├── test_preferences.py
+│   ├── test_system_checks.py
+│   └── test_tui_usability.py
 ```
 
 Cartelle locali comunemente presenti ma non tracciate: `.superpowers/`, `PDF Sample/`.
 
-Numero test attuale: `55` test `unittest` in `tests/test_cli.py`.
+Numero test attuale: `94` test `unittest`.
 
 ---
 
@@ -203,12 +218,16 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 
 - TUI Textual pura
 - `PyDFApp` monta `HomeScreen`
+- `PyDFApp` carica preferenze persistenti e lancia un preflight iniziale dei prerequisiti
 - `HomeScreen` funge da launcher e apre `OCR`, `Comprimi PDF` o `Help`
 - `OCRMenuScreen` separa `Verifica OCR` da `Esegui OCR`
 - `WizardScreen` gestisce i flussi guidati
+- `WizardScreen` supporta selezione file da Finder con `F2` / pulsante dedicato
+- `WizardScreen` usa hint espliciti per suggerire output default nella stessa cartella dell'input
 - `CheckInputScreen` e `CheckResultScreen` coprono `check`
 - `CheckResultScreen` gestisce il focus dei pulsanti via tastiera
 - `ProgressScreen` avvia OCR/compressione con `@work(thread=True)`
+- `ProgressScreen` espone azioni finali `Apri file` / `Apri cartella`
 - `dispatch_interactive_command()` resta come helper per comandi testuali e test
 
 ### `ocr.py`
@@ -238,27 +257,55 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 - generazione output incrementale
 - formattazione dimensioni
 
+### `preferences.py`
+
+- persistenza locale delle preferenze in `~/Library/Application Support/PyDF Tool/preferences.json`
+- salva ultima cartella usata
+- salva lingua OCR preferita
+- salva livello compressione preferito
+
+### `system_checks.py`
+
+- controlli di sistema per `global`, `ocr`, `compress`, `check`
+- rilevamento di `tesseract`, `pdftocairo`/`pdftoppm`, `gs`
+- messaggi user-facing con hint Homebrew
+
+### `macos_integration.py`
+
+- apertura del file picker Finder via `osascript`
+- apertura file con app di default via `open`
+- apertura/rivelazione cartella output via Finder
+
 ---
 
 ## Stato verificato
 
 ### Verificato in questa fase
 
-- suite test verde: `55` test
+- suite test verde: `94` test
 - import e runtime verificati dentro `.venv`
 - struttura docs/spec/plan presente e leggibile
 - launcher TUI verificato con home, sottomenu OCR e focus pulsanti
 - wizard OCR verificato con highlight immediato del passo `Formato` dopo `Lingua`
 - placeholder output verificati: `vuoto = stessa cartella del file di partenza`
+- picker Finder verificato con test dedicati
+- preflight prerequisiti e blocchi OCR/compress verificati con test dedicati
+- preferenze persistenti verificate con round-trip e fallback da file corrotto
 
 ### Funzionalità implementate
 
 - `check`, `ocr`, `compress` disponibili da CLI
 - TUI Textual con home launcher, sottomenu OCR, wizard, help, check e progress
 - wizard TUI con scelte guidate a frecce per lingua, formato, colore e preset
+- picker Finder per i campi file in TUI (`F2` + pulsante)
 - compressione TUI con supporto al grado numerico personalizzato `1-100`
 - avvio OCR da `Verifica OCR` con path già in memoria e passo file saltato
 - placeholder output più espliciti: il default salva nella stessa cartella dell'input; OCR adatta l'estensione suggerita a `.pdf` o `.txt`
+- output suggerito mostrato in chiaro con hint dedicato
+- checks iniziali su dipendenze esterne e blocco delle operazioni non eseguibili
+- preferenze persistenti per cartella, lingua OCR e livello compressione
+- schermata finale con azioni pratiche `Apri file` / `Apri cartella`
+- messaggi finali più utili: percorso salvato, variazione dimensione, passo successivo suggerito
 - OCR low-memory pagina per pagina
 - compressione con staging e supporto path Unicode
 - naming incrementale degli output
@@ -277,11 +324,19 @@ Task completati (subagent-driven, 46 test verdi):
 
 Tutti e 8 i task sono stati completati. Stato finale di quel blocco: **51 test verdi**.
 
-### Fix post-sessione
+### Fix e follow-up UX
 
 - **CSS `btn-home` focus**: aggiunto selettore `#result-buttons Button:focus` (specificità 0,1,1,1) per battere il DEFAULT_CSS di Textual 8.x `Button.-style-default:focus` (0,0,2,1) che causava sfondo ambra sul pulsante "Torna al menu" quando focalizzato
 - **Wizard choice highlight**: il popolamento asincrono delle liste del wizard ora attende il mount delle opzioni prima di impostare indice e classe `-highlight`; questo evita il caso in cui il passo `Formato` mostrasse la prima opzione non evidenziata finché l'utente non si muoveva con le frecce
 - **Placeholder output più chiaro**: i passi `Output` di OCR e compressione non parlano più di “automatico”; dichiarano esplicitamente che il file viene salvato nella stessa cartella dell'input se il campo resta vuoto. Nel wizard OCR il placeholder segue anche il formato scelto (`.pdf` o `.txt`)
+- **File picker Finder**: i campi file dei wizard e della verifica OCR possono aprire il selettore di macOS via `osascript`, con hint sulla directory usata più di recente
+- **Preflight prerequisiti**: `PyDFApp` esegue controlli iniziali e blocca OCR/compressione se mancano i binari esterni richiesti
+- **Preferenze persistenti**: ultima cartella, lingua OCR e livello compressione vengono salvati in `~/Library/Application Support/PyDF Tool/preferences.json`
+- **Azioni finali pratiche**: le schermate di esito possono aprire il file prodotto o la cartella di destinazione direttamente dal Finder
+- **Navigazione mista mouse+tastiera nei passi file**: wizard e schermata `check` permettono ora di raggiungere il pulsante Finder anche con `↑↓` e `Tab`, senza dipendere dal click del mouse; il bottone ha anche spacing verticale corretto rispetto all'input
+- **Focus post-Finder corretto**: dopo aver scelto un file dal picker macOS, il focus ritorna automaticamente al campo percorso invece di restare sul pulsante Finder
+- **Progress screen ripulita**: la schermata di avanzamento mostra un solo hint `Ctrl+C` nel footer e la barra di progresso usa tutta la larghezza utile del layout
+- **OCR submenu compattato**: `OCRMenuScreen` è stato riallineato visivamente ai flussi operativi, con titolo/prompt compatti e preview sotto la lista invece del vecchio layout hero + doppio pannello
 
 ### Note tecniche (Textual 8.x)
 
@@ -295,18 +350,43 @@ Sessione del `2026-04-12` svolta da `Codex`.
 
 File toccati in questa sessione:
 
+- `src/pydf_tool/preferences.py`
+  - nuovo modulo per persistenza preferenze locali con salvataggio atomico e fallback da file corrotto
+- `src/pydf_tool/system_checks.py`
+  - nuovo modulo per controlli di sistema globali e per singola operazione (`check`, `ocr`, `compress`)
+- `src/pydf_tool/macos_integration.py`
+  - nuovo modulo per picker Finder, apertura file con app di default e apertura cartella output
 - `src/pydf_tool/tui.py`
   - fix del popolamento asincrono delle liste del wizard per mostrare subito l'highlight sulla prima scelta disponibile
+  - integrazione di preferenze persistenti, picker Finder e preflight prerequisiti
   - placeholder output resi espliciti sul salvataggio nella stessa cartella del file di partenza
   - placeholder OCR reso dipendente dal formato scelto (`.pdf` / `.txt`)
+  - schermata finale estesa con azioni `Apri file` / `Apri cartella` e messaggi più pratici
+  - navigazione dei passi file estesa per permettere focus `input <-> Finder` via `↑↓` e `Tab`
+  - focus riportato ai campi percorso dopo la selezione da Finder in wizard e schermata `check`
+  - schermata di avanzamento semplificata rimuovendo il doppio hint di annullamento
+  - sottomenu OCR convertito a layout compatto coerente col wizard
 - `src/pydf_tool/tui.tcss`
   - neutralizzato il `reverse`/`background-tint` di Textual sul focus dei pulsanti risultato per eliminare lo sfondo giallo pieno su `Torna al menu`
+  - aggiunti gli stili per picker Finder, hint di output, modal prerequisiti e azioni finali
+  - corretto il margine verticale dei pulsanti Finder sotto gli input file
+  - estesa la barra di progresso a tutta la larghezza utile del pannello
+  - aggiunti gli stili dedicati per il nuovo layout compatto del sottomenu OCR
 - `tests/test_cli.py`
   - regressione sul focus coerente di `btn-home`
   - regressione sul primo highlight del passo `Formato`
   - regressioni sui placeholder output di OCR e compressione
+  - aggiunto test sul layout compatto del sottomenu OCR
+- `tests/test_preferences.py`
+  - test sul round-trip delle preferenze e sul recupero da JSON corrotto
+- `tests/test_system_checks.py`
+  - test sui report di prerequisiti mancanti e sui controlli per operazione
+- `tests/test_macos_integration.py`
+  - test sul parsing dell'output `osascript` e sui comandi `open`
+- `tests/test_tui_usability.py`
+  - regressioni su picker Finder, preferenze default, preflight iniziale, hint output, pulsanti finali, navigazione `input <-> Finder` e focus corretto dopo il picker
 - `PROJECT_CONTEXT.md`
-  - aggiornato il handoff con stato reale, test count, fix recenti e priorità di usabilità per una beta locale
+  - aggiornato il handoff con stato reale, test count, fix recenti e stato delle priorità di usabilità per una beta locale
 
 Sessione del `2026-03-31` svolta da `Codex`.
 
@@ -363,9 +443,9 @@ File toccati in quella sessione:
 
 ### Gap nei test
 
-- nessun test dedicato al path OCR `.pdf`
-- nessun test Textual completo sul wizard OCR/compress o sul flow `check -> run ocr`
+- nessun end-to-end OCR `.pdf` con Tesseract reale
 - nessun end-to-end con Tesseract o Ghostscript reali
+- nessun test di integrazione reale su Finder / `open` macOS fuori dai mock
 - nessun test per `resolve_incremental_output_path` con collisioni multiple
 
 ### Debito tecnico leggero
@@ -374,13 +454,19 @@ File toccati in quella sessione:
 
 ### Priorità usabilità per una beta locale
 
+Completato in questa fase:
+
 - selezione file da Finder al posto dell'inserimento manuale dei path
-- controlli iniziali che segnalino subito assenza di `tesseract`, `poppler` o `ghostscript`
+- controlli iniziali che segnalano subito assenza di `tesseract`, `poppler` o `ghostscript`
 - output più guidato: default nella stessa cartella, naming più esplicito, azioni finali `Apri file` / `Apri cartella`
 - preferenze persistenti: ultima cartella usata, lingua OCR preferita, livello compressione preferito
 - messaggi post-operazione più pratici: dove è stato salvato il file, quanto è cambiata la dimensione, passo successivo suggerito
+
+Residuo prima di chiamarla beta distribuibile:
+
 - test su un Mac pulito, senza toolchain già preparata, prima di etichettare una beta come distribuibile
-- beta locale fattibile come launcher macOS `.app` con icona che apre Terminal e avvia `pydf-tool`; utile per tester non tecnici, ma non ancora equivalente a un'app standalone con runtime e dipendenze integrate
+- launcher macOS `.app` con icona che apre Terminal e avvia `pydf-tool`; utile per tester non tecnici, ma non ancora equivalente a un'app standalone con runtime e dipendenze integrate
+- eventuale packaging successivo con runtime Python incorporato e dipendenze meglio nascoste all'utente finale
 
 ---
 

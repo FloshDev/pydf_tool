@@ -10,7 +10,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from textual.widgets import Input, ListView, Static
+from textual.widgets import Input, ListView, ProgressBar, Static
 
 from pydf_tool.check_ocr import CheckOCRResult, check_ocr
 from pydf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
@@ -22,6 +22,7 @@ from pydf_tool.compress import (
 from pydf_tool.errors import PDFToolError
 from pydf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
 from pydf_tool.ocr import run_ocr
+from pydf_tool.preferences import Preferences
 from pydf_tool.tui import (
     CheckInputScreen,
     CheckResultScreen,
@@ -228,7 +229,10 @@ class PathNormalizationTestCase(unittest.TestCase):
 
 class TUIScreenTestCase(unittest.TestCase):
     def _make_app(self) -> PyDFApp:
-        return PyDFApp()
+        return PyDFApp(
+            show_startup_checks=False,
+            preferences=Preferences.default(),
+        )
 
     def test_home_menu_shows_ocr_compress_and_help(self) -> None:
         async def scenario() -> None:
@@ -255,6 +259,24 @@ class TUIScreenTestCase(unittest.TestCase):
                     ["check", "ocr", "back"],
                 )
                 self.assertEqual(app.focused.id if app.focused else None, "menu-list")
+
+        asyncio.run(scenario())
+
+    def test_ocr_menu_uses_compact_submenu_layout(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                await pilot.press("enter")
+                await pilot.pause()
+
+                title = app.screen.query_one("#wizard-title", Static)
+                prompt = app.screen.query_one("#step-prompt", Static)
+                preview_title = app.screen.query_one("#ocr-preview-title", Static)
+
+                self.assertEqual(title.content, "OCR")
+                self.assertIn("Scegli l'azione", prompt.content)
+                self.assertEqual(preview_title.content, "Verifica OCR")
+                self.assertEqual(len(list(app.screen.query("#header"))), 0)
 
         asyncio.run(scenario())
 
@@ -540,6 +562,10 @@ class TUIScreenTestCase(unittest.TestCase):
 
                 footer = progress.query_one("#footer-bar", Static)
                 self.assertIn("Ctrl+C", footer.content)
+                self.assertEqual(len(list(progress.query("#cancel-hint"))), 0)
+
+                bar = progress.query_one("#progress-bar", ProgressBar)
+                self.assertGreater(bar.size.width, 50)
 
         asyncio.run(scenario())
 

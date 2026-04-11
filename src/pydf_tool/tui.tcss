@@ -247,8 +247,52 @@ HelpScreen > ScrollableContainer {
     padding: 1 2 0 2;
 }
 
+#ocr-menu-panel {
+    border: solid $border;
+    background: $surface;
+    height: 1fr;
+}
+
+#ocr-menu-panel #menu-list {
+    height: auto;
+    max-height: 12;
+    border-bottom: solid $border;
+    padding-top: 1;
+}
+
+#ocr-menu-preview {
+    height: 1fr;
+    background: $surface;
+}
+
+#ocr-preview-title {
+    color: $accent;
+    text-style: bold;
+    padding: 1 2 0 2;
+}
+
+#ocr-preview-body {
+    color: $text;
+    padding: 1 2;
+    text-wrap: wrap;
+}
+
+#ocr-preview-hint {
+    color: $secondary;
+    border-top: solid $border;
+    background: $surface-soft;
+    padding: 0 2;
+    height: auto;
+}
+
 #step-input {
     margin: 0 2;
+}
+
+#finder-button,
+#check-picker-button {
+    margin: 1 2 0 2;
+    width: auto;
 }
 
 Input {
@@ -278,6 +322,13 @@ Input:focus {
     min-height: 2;
 }
 
+#step-hint,
+#check-hint {
+    color: $secondary;
+    padding: 0 2;
+    height: auto;
+}
+
 #result-table {
     color: $text;
     padding: 1 2;
@@ -294,12 +345,27 @@ Input:focus {
     padding: 1 2;
 }
 
-#elapsed-label {
-    color: $secondary;
-    padding: 0 2;
+#progress-bar {
+    width: 100%;
+    margin: 0 2 1 2;
 }
 
-#cancel-hint {
-    color: $secondary;
-    padding: 0 2;
+#progress-result-buttons,
+#system-check-buttons {
+    width: auto;
+    height: auto;
+    padding: 0 1 1 1;
+}
+
+#system-check-container {
+    border: solid $border;
+    padding: 1 2;
+    background: $surface;
+    overflow-y: auto;
+    scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
+}
+
+#system-check-content {
+    color: $text;
 }

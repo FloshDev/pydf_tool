@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from textual import events, work
 from textual.app import App, ComposeResult
@@ -18,8 +19,11 @@ from textual.widgets import Button, Input, ListItem, ListView, ProgressBar, Stat
 from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
+from .macos_integration import choose_pdf_file, open_output_folder, open_with_default_app
 from .ocr import OCRResult, run_ocr
+from .preferences import Preferences, load_preferences, save_preferences
 from .progress import OperationProgress
+from .system_checks import SystemCheckReport, check_global_systems, check_operation_systems
 from .utils import (
     ensure_pdf_input,
     format_size_change,
@@ -30,12 +34,6 @@ from .utils import (
 # ── Costanti ──────────────────────────────────────────────────────────────────
 
 EXIT_COMMANDS = {"exit", "quit", ":q"}
-
-_OCR_HEADER_TEXT = """\
-OCR
-verifica un PDF oppure avvia subito l'OCR guidato
-scegli l'azione da eseguire"""
-
 
 @dataclass(frozen=True)
 class MenuEntry:
@@ -131,7 +129,10 @@ _OCR_MENU_ITEMS: list[MenuEntry] = [
 _FOOTER_HOME = "↑↓ naviga   Invio apre   H/F1 help   Q/Esc esci"
 _FOOTER_SUBMENU = "↑↓ naviga   Invio apre   Esc torna indietro"
 _FOOTER_WIZARD_INPUT = "Invio avanza   Esc torna indietro"
+_FOOTER_WIZARD_FILE = "Invio avanza   F2 Finder   Esc torna indietro"
 _FOOTER_WIZARD_CHOICE = "↑↓ seleziona   Invio conferma   Esc torna indietro"
+_FOOTER_CHECK_INPUT = "Invio conferma   F2 Finder   Esc annulla"
+_FOOTER_RESULT_ACTIONS = "↑↓ cambia pulsante   Invio conferma   Esc torna al menu"
 
 _HELP_TEXT = """\
 Flussi supportati
@@ -169,6 +170,52 @@ Usa 'pydf-tool COMANDO --help' per dettagli sul singolo comando."""
 def _return_to_home(app: App) -> None:
     while len(app.screen_stack) > 1 and not isinstance(app.screen, HomeScreen):
         app.pop_screen()
+
+
+def _display_path(path: str | Path) -> str:
+    candidate = resolve_user_path(path)
+    home = Path.home()
+    try:
+        return f"~/{candidate.relative_to(home)}"
+    except ValueError:
+        return str(candidate)
+
+
+def _preferences_for_app(app: App) -> Preferences:
+    return cast("PyDFApp", app).preferences
+
+
+class SystemCheckScreen(ModalScreen):
+    BINDINGS = [
+        Binding("escape", "dismiss_screen", "Chiudi"),
+        Binding("enter", "dismiss_screen", "Chiudi"),
+        Binding("q", "dismiss_screen", "Chiudi"),
+    ]
+
+    def __init__(self, report: SystemCheckReport, *, title: str) -> None:
+        super().__init__()
+        self._report = report
+        self._title = title
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._title, id="header")
+        yield ScrollableContainer(
+            Static(self._report.message, id="system-check-content"),
+            id="system-check-container",
+        )
+        with Vertical(id="system-check-buttons"):
+            yield Button("Chiudi", id="btn-close-system-check")
+        yield Static("Invio · Esc · Q chiudono questa schermata", id="footer-bar")
+
+    def on_mount(self) -> None:
+        self.query_one("#btn-close-system-check", Button).focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-close-system-check":
+            self.dismiss()
+
+    def action_dismiss_screen(self) -> None:
+        self.dismiss()
 
 
 # ── HelpScreen ────────────────────────────────────────────────────────────────
@@ -282,6 +329,8 @@ class HomeScreen(MenuScreen):
         if action_id == "ocr-menu":
             self.app.push_screen(OCRMenuScreen())
         elif action_id == "compress":
+            if not cast("PyDFApp", self.app).ensure_operation_available("compress"):
+                return
             self.app.push_screen(WizardScreen(mode=action_id))
         elif action_id == "help":
             self.app.push_screen(HelpScreen())
@@ -303,30 +352,37 @@ class OCRMenuScreen(MenuScreen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static(_OCR_HEADER_TEXT, id="header")
-        with Horizontal(id="body"):
-            with Vertical(id="menu-panel"):
-                yield Static("Azioni OCR", classes="panel-title")
-                yield ListView(
-                    *[MenuEntryItem(entry) for entry in _OCR_MENU_ITEMS],
-                    id="menu-list",
-                )
-            with Vertical(id="preview-panel"):
-                yield Static("Dettagli", classes="panel-title")
-                with ScrollableContainer(id="preview-copy"):
-                    yield Static("", id="preview-title")
-                    yield Static("", id="preview-body")
-                yield Static("", id="preview-hint")
+        yield Static("OCR", id="wizard-title")
+        yield Static("Scegli l'azione da eseguire.", id="step-prompt")
+        with Vertical(id="ocr-menu-panel"):
+            yield ListView(
+                *[MenuEntryItem(entry) for entry in _OCR_MENU_ITEMS],
+                id="menu-list",
+            )
+            with Vertical(id="ocr-menu-preview"):
+                yield Static("", id="ocr-preview-title")
+                yield Static("", id="ocr-preview-body")
+                yield Static("", id="ocr-preview-hint")
         yield Static(_FOOTER_SUBMENU, id="footer-bar")
 
     def on_mount(self) -> None:
         self._set_preview(_OCR_MENU_ITEMS[0].key)
         self.query_one("#menu-list", ListView).focus()
 
+    def _set_preview(self, action_id: str) -> None:
+        entry = next((item for item in self._menu_items if item.key == action_id), None)
+        if entry is None:
+            return
+        self.query_one("#ocr-preview-title", Static).update(entry.preview_title)
+        self.query_one("#ocr-preview-body", Static).update(entry.preview_body)
+        self.query_one("#ocr-preview-hint", Static).update(entry.preview_hint)
+
     def _dispatch_action(self, action_id: str) -> None:
         if action_id == "check":
             self.app.push_screen(CheckInputScreen())
         elif action_id == "ocr":
+            if not cast("PyDFApp", self.app).ensure_operation_available("ocr"):
+                return
             self.app.push_screen(WizardScreen(mode="ocr"))
         else:
             self.app.pop_screen()
@@ -411,6 +467,7 @@ _WIZARD_STEPS: dict[str, list[WizardStep]] = {
 class WizardScreen(Screen):
     BINDINGS = [
         Binding("escape", "go_back", "Indietro"),
+        Binding("f2", "pick_pdf_from_finder", "Finder"),
         Binding("h", "push_help", "Help"),
         Binding("f1", "push_help", "Help"),
     ]
@@ -432,15 +489,37 @@ class WizardScreen(Screen):
         yield Static(title, id="wizard-title")
         yield Static("", id="step-prompt")
         yield Input(id="step-input")
+        yield Button("Scegli PDF da Finder", id="finder-button")
         yield ListView(id="step-choices")
+        yield Static("", id="step-hint")
         yield Static("", id="step-error", classes="error-label")
         yield Static("", id="footer-bar")
 
     def on_mount(self) -> None:
+        self._apply_preference_defaults()
         self._render_step(0)
 
     def watch_current_step(self, step: int) -> None:
         self._render_step(step)
+
+    def _apply_preference_defaults(self) -> None:
+        preferences = _preferences_for_app(self.app)
+        if self._mode == "ocr" and "lingua" not in self._values:
+            self._values["lingua"] = preferences.ocr_language
+            return
+
+        if self._mode != "compress" or "livello" in self._values:
+            return
+
+        preferred_level = preferences.compression_level.strip().lower()
+        if preferred_level in {"low", "medium", "high"}:
+            self._values["livello"] = preferred_level
+            return
+        if preferred_level.isdigit() and 1 <= int(preferred_level) <= 100:
+            self._values["livello"] = "custom"
+            self._values["grado"] = preferred_level
+            return
+        self._values["livello"] = "medium"
 
     def _visible_steps(self) -> list[WizardStep]:
         steps = self._steps
@@ -464,20 +543,32 @@ class WizardScreen(Screen):
         current = steps[step]
         self.query_one("#step-prompt", Static).update(current.prompt)
         inp = self.query_one("#step-input", Input)
+        finder_button = self.query_one("#finder-button", Button)
         choice_list = self.query_one("#step-choices", ListView)
+        hint = self.query_one("#step-hint", Static)
         if current.choices:
             inp.display = False
+            finder_button.display = False
             choice_list.display = True
             selected_value = self._values.get(current.name.lower(), current.choices[0].value)
             self._populate_choice_list(current.choices, selected_value)
             self.query_one("#footer-bar", Static).update(_FOOTER_WIZARD_CHOICE)
+            hint.update(self._step_hint_text(current))
+            hint.display = bool(hint.content)
         else:
             choice_list.display = False
             inp.display = True
             inp.placeholder = self._resolve_input_placeholder(current)
             inp.value = self._values.get(current.name.lower(), "")
             inp.focus()
-            self.query_one("#footer-bar", Static).update(_FOOTER_WIZARD_INPUT)
+            is_file_step = current.name == "File"
+            finder_button.display = is_file_step
+            self.query_one("#footer-bar", Static).update(
+                _FOOTER_WIZARD_FILE if is_file_step else _FOOTER_WIZARD_INPUT
+            )
+            hint_text = self._step_hint_text(current)
+            hint.update(hint_text)
+            hint.display = bool(hint_text)
         self.query_one("#step-error", Static).update("")
 
     def _resolve_input_placeholder(self, step: WizardStep) -> str:
@@ -488,6 +579,31 @@ class WizardScreen(Screen):
                 "(vuoto = stessa cartella del file di partenza)"
             )
         return step.placeholder
+
+    def _step_hint_text(self, step: WizardStep) -> str:
+        preferences = _preferences_for_app(self.app)
+        if step.name == "File":
+            if preferences.last_directory is not None:
+                return (
+                    "F2 apre Finder. Ultima cartella usata: "
+                    f"{_display_path(preferences.last_directory)}"
+                )
+            return "F2 apre Finder per selezionare un PDF senza scrivere il percorso."
+        if step.name == "Output":
+            suggestion = self._suggested_output_path()
+            if suggestion is not None:
+                return f"Lascia vuoto per usare: {_display_path(suggestion)}"
+        return ""
+
+    def _suggested_output_path(self) -> Path | None:
+        file_value = self._values.get("file", "").strip()
+        if not file_value:
+            return None
+        input_path = resolve_user_path(file_value)
+        if self._mode == "ocr":
+            extension = ".txt" if self._values.get("formato") == "txt" else ".pdf"
+            return resolve_incremental_output_path(input_path, extension)
+        return resolve_incremental_output_path(input_path, ".pdf")
 
     def _focus_choice_value(self, value: str) -> None:
         step = self._visible_steps()[self.current_step]
@@ -522,6 +638,23 @@ class WizardScreen(Screen):
         self._focus_choice_value(selected_value)
         self._sync_choice_highlight_class()
 
+    def on_key(self, event: events.Key) -> None:
+        current_step = self._visible_steps()[self.current_step]
+        if current_step.name != "File" or current_step.choices:
+            return
+        if event.key in {"down", "tab"}:
+            event.stop()
+            event.prevent_default()
+            self._move_file_step_focus(1)
+        elif event.key in {"up", "shift+tab"}:
+            event.stop()
+            event.prevent_default()
+            self._move_file_step_focus(-1)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "finder-button":
+            self.action_pick_pdf_from_finder()
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self._advance(event.value.strip())
 
@@ -539,6 +672,7 @@ class WizardScreen(Screen):
             self.query_one("#step-error", Static).update(err)
             return
         self._values[s.name.lower()] = value
+        self._remember_preference_from_step(s.name, value)
         if s.name == "Livello" and value != "custom":
             self._values.pop("grado", None)
         visible_steps = self._visible_steps()
@@ -566,6 +700,56 @@ class WizardScreen(Screen):
         elif s.choices and value not in {choice.value for choice in s.choices}:
             return f"Scegli tra: {' · '.join(choice.value for choice in s.choices)}"
         return ""
+
+    def _remember_preference_from_step(self, step_name: str, value: str) -> None:
+        app = cast("PyDFApp", self.app)
+        normalized_name = step_name.lower()
+        if normalized_name == "file":
+            app.remember_path(value)
+        elif normalized_name == "lingua":
+            app.set_ocr_language(value)
+        elif normalized_name == "livello" and value != "custom":
+            app.set_compression_level(value)
+        elif normalized_name == "grado":
+            app.set_compression_level(value)
+        elif normalized_name == "output" and value.strip():
+            app.remember_path(value)
+
+    def action_pick_pdf_from_finder(self) -> None:
+        current_step = self._visible_steps()[self.current_step]
+        if current_step.name != "File":
+            return
+        try:
+            selected = choose_pdf_file(
+                initial_directory=_preferences_for_app(self.app).last_directory,
+                prompt=current_step.prompt,
+            )
+        except PDFToolError as exc:
+            self.query_one("#step-error", Static).update(str(exc))
+            return
+
+        if selected is None:
+            return
+
+        input_widget = self.query_one("#step-input", Input)
+        input_widget.value = str(selected)
+        input_widget.focus()
+        cast("PyDFApp", self.app).remember_path(selected)
+        hint = self.query_one("#step-hint", Static)
+        hint.update(self._step_hint_text(current_step))
+        hint.display = bool(hint.content)
+
+    def _move_file_step_focus(self, direction: int) -> None:
+        focusables: list[Input | Button] = [
+            self.query_one("#step-input", Input),
+            self.query_one("#finder-button", Button),
+        ]
+        focused = self.app.focused
+        if focused in focusables:
+            next_index = (focusables.index(focused) + direction) % len(focusables)
+        else:
+            next_index = 0 if direction > 0 else len(focusables) - 1
+        focusables[next_index].focus()
 
     def _finish(self) -> None:
         args = self._build_args()
@@ -622,17 +806,33 @@ class WizardScreen(Screen):
 # ── CheckInputScreen + CheckResultScreen (Phase 4) ────────────────────────────
 
 class CheckInputScreen(Screen):
-    BINDINGS = [Binding("escape", "go_back", "Annulla")]
+    BINDINGS = [
+        Binding("escape", "go_back", "Annulla"),
+        Binding("f2", "pick_pdf_from_finder", "Finder"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Static("Verifica OCR", id="wizard-title")
         yield Static("Percorso del PDF da verificare:", id="step-prompt")
         yield Input(placeholder="es. ~/Documents/doc.pdf", id="check-input")
+        yield Button("Scegli PDF da Finder", id="check-picker-button")
+        yield Static("", id="check-hint")
         yield Static("", id="check-error", classes="error-label")
-        yield Static("Invio conferma   Esc annulla", id="footer-bar")
+        yield Static(_FOOTER_CHECK_INPUT, id="footer-bar")
 
     def on_mount(self) -> None:
         self.query_one("#check-input", Input).focus()
+        self._update_hint()
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key in {"down", "tab"}:
+            event.stop()
+            event.prevent_default()
+            self._move_focus(1)
+        elif event.key in {"up", "shift+tab"}:
+            event.stop()
+            event.prevent_default()
+            self._move_focus(-1)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         path_str = event.value.strip()
@@ -650,10 +850,57 @@ class CheckInputScreen(Screen):
         except PDFToolError as e:
             self.query_one("#check-error", Static).update(str(e))
             return
+        cast("PyDFApp", self.app).remember_path(path)
         self.app.push_screen(CheckResultScreen(result=result, input_path=path))
 
     def action_go_back(self) -> None:
         self.app.pop_screen()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "check-picker-button":
+            self.action_pick_pdf_from_finder()
+
+    def action_pick_pdf_from_finder(self) -> None:
+        try:
+            selected = choose_pdf_file(
+                initial_directory=_preferences_for_app(self.app).last_directory,
+                prompt="Seleziona il PDF da verificare",
+            )
+        except PDFToolError as exc:
+            self.query_one("#check-error", Static).update(str(exc))
+            return
+
+        if selected is None:
+            return
+
+        input_widget = self.query_one("#check-input", Input)
+        input_widget.value = str(selected)
+        input_widget.focus()
+        cast("PyDFApp", self.app).remember_path(selected)
+        self._update_hint()
+
+    def _update_hint(self) -> None:
+        hint = self.query_one("#check-hint", Static)
+        last_directory = _preferences_for_app(self.app).last_directory
+        if last_directory is None:
+            hint.update("F2 apre Finder per selezionare un PDF senza scrivere il percorso.")
+            return
+        hint.update(
+            "F2 apre Finder. Ultima cartella usata: "
+            f"{_display_path(last_directory)}"
+        )
+
+    def _move_focus(self, direction: int) -> None:
+        focusables: list[Input | Button] = [
+            self.query_one("#check-input", Input),
+            self.query_one("#check-picker-button", Button),
+        ]
+        focused = self.app.focused
+        if focused in focusables:
+            next_index = (focusables.index(focused) + direction) % len(focusables)
+        else:
+            next_index = 0 if direction > 0 else len(focusables) - 1
+        focusables[next_index].focus()
 
 
 def _verdict_label(verdict: str) -> str:
@@ -752,6 +999,8 @@ class CheckResultScreen(Screen):
         self._go_home()
 
     def _launch_ocr(self) -> None:
+        if not cast("PyDFApp", self.app).ensure_operation_available("ocr"):
+            return
         self.app.pop_screen()  # pop CheckResultScreen
         self.app.pop_screen()  # pop CheckInputScreen
         self.app.pop_screen()  # pop OCRMenuScreen
@@ -766,6 +1015,12 @@ class CheckResultScreen(Screen):
 class ProgressScreen(Screen):
     BINDINGS = [
         Binding("ctrl+c", "cancel_op", "Annulla"),
+        Binding("up", "focus_prev_button", "Prec", show=False),
+        Binding("left", "focus_prev_button", "Prec", show=False),
+        Binding("shift+tab", "focus_prev_button", "Prec", show=False),
+        Binding("down", "focus_next_button", "Succ", show=False),
+        Binding("right", "focus_next_button", "Succ", show=False),
+        Binding("tab", "focus_next_button", "Succ", show=False),
     ]
 
     def __init__(self, mode: str, args: dict) -> None:
@@ -774,17 +1029,22 @@ class ProgressScreen(Screen):
         self._args = args
         self._cancel_event = threading.Event()
         self._result_ready = False
+        self._result_path: Path | None = None
+        self._result_message = ""
 
     def compose(self) -> ComposeResult:
         title = "Esegui OCR" if self._mode == "ocr" else "Comprimi PDF"
         yield Static(f"PyDF Tool — {title}", id="header")
         yield Static("Avvio in corso...", id="status-msg")
         yield ProgressBar(total=100, id="progress-bar", show_eta=False)
-        yield Static("", id="elapsed-label")
-        yield Static("Ctrl+C per annullare", id="cancel-hint")
+        with Vertical(id="progress-result-buttons"):
+            yield Button("Apri file", id="btn-open-file")
+            yield Button("Apri cartella", id="btn-open-folder")
+            yield Button("Torna al menu", id="btn-progress-home")
         yield Static("Ctrl+C per annullare", id="footer-bar")
 
     def on_mount(self) -> None:
+        self.query_one("#progress-result-buttons", Vertical).display = False
         self._run_operation()
 
     @work(thread=True)
@@ -824,16 +1084,35 @@ class ProgressScreen(Screen):
             bar.update(total=p.total, progress=p.completed)
 
     def _on_success_ocr(self, result: OCRResult) -> None:
+        cast("PyDFApp", self.app).remember_path(result.output_path)
         self._show_result(
-            f"OCR completato\n\nOutput: {result.output_path}\nPagine: {result.pages}",
+            (
+                "OCR completato\n\n"
+                f"Output salvato in:\n{result.output_path}\n\n"
+                f"Pagine elaborate: {result.pages}\n"
+                "Prossimo passo: apri il file per controllare il risultato oppure "
+                "apri la cartella di output."
+            ),
             success=True,
+            output_path=result.output_path,
         )
 
     def _on_success_compress(self, result: CompressionResult) -> None:
+        cast("PyDFApp", self.app).remember_path(result.output_path)
         change = format_size_change(result.size_before, result.size_after)
+        note = ""
+        if result.size_after > result.size_before:
+            note = "\nNota: il file finale è più grande dell'originale."
         self._show_result(
-            f"Compressione completata\n\nOutput: {result.output_path}\nRiduzione: {change}",
+            (
+                "Compressione completata\n\n"
+                f"Output salvato in:\n{result.output_path}\n\n"
+                f"Variazione dimensione: {change}{note}\n"
+                "Prossimo passo: apri il file per verificare la qualità oppure "
+                "apri la cartella di output."
+            ),
             success=True,
+            output_path=result.output_path,
         )
 
     def _on_error(self, message: str) -> None:
@@ -842,15 +1121,28 @@ class ProgressScreen(Screen):
     def _on_cancelled(self) -> None:
         self._show_result("Operazione annullata.", cancelled=True)
 
-    def _show_result(self, text: str, success: bool = False, cancelled: bool = False) -> None:
+    def _show_result(
+        self,
+        text: str,
+        success: bool = False,
+        cancelled: bool = False,
+        output_path: Path | None = None,
+    ) -> None:
         self.query_one("#progress-bar", ProgressBar).display = False
-        self.query_one("#cancel-hint", Static).display = False
         self.query_one("#status-msg", Static).update(text)
-        self.query_one("#footer-bar", Static).update("Invio per tornare al menu")
+        self._result_message = text
+        self._result_path = output_path
+        button_panel = self.query_one("#progress-result-buttons", Vertical)
+        button_panel.display = True
+        self.query_one("#btn-open-file", Button).display = success and output_path is not None
+        self.query_one("#btn-open-folder", Button).display = success and output_path is not None
+        self.query_one("#btn-progress-home", Button).display = True
+        self.query_one("#footer-bar", Static).update(_FOOTER_RESULT_ACTIONS)
         self._result_ready = True
+        self._focus_first_button()
 
     def on_key(self, event: events.Key) -> None:
-        if self._result_ready and event.key in ("enter", "escape"):
+        if self._result_ready and event.key == "escape":
             event.stop()
             event.prevent_default()
             _return_to_home(self.app)
@@ -858,14 +1150,123 @@ class ProgressScreen(Screen):
     def action_cancel_op(self) -> None:
         self._cancel_event.set()
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-open-file":
+            self._open_result_file()
+        elif event.button.id == "btn-open-folder":
+            self._open_result_folder()
+        else:
+            _return_to_home(self.app)
+
+    def action_focus_next_button(self) -> None:
+        if self._result_ready:
+            self._move_button_focus(1)
+
+    def action_focus_prev_button(self) -> None:
+        if self._result_ready:
+            self._move_button_focus(-1)
+
+    def _visible_buttons(self) -> list[Button]:
+        return [button for button in self.query("#progress-result-buttons Button") if button.display]
+
+    def _focus_first_button(self) -> None:
+        buttons = self._visible_buttons()
+        if buttons:
+            buttons[0].focus()
+
+    def _move_button_focus(self, direction: int) -> None:
+        buttons = self._visible_buttons()
+        if not buttons:
+            return
+        focused = self.app.focused
+        if isinstance(focused, Button) and focused in buttons:
+            current_index = buttons.index(focused)
+        else:
+            current_index = 0
+        buttons[(current_index + direction) % len(buttons)].focus()
+
+    def _open_result_file(self) -> None:
+        if self._result_path is None:
+            return
+        try:
+            open_with_default_app(self._result_path)
+        except PDFToolError as exc:
+            self._show_action_error(exc)
+
+    def _open_result_folder(self) -> None:
+        if self._result_path is None:
+            return
+        try:
+            open_output_folder(self._result_path)
+        except PDFToolError as exc:
+            self._show_action_error(exc)
+
+    def _show_action_error(self, exc: PDFToolError) -> None:
+        self.query_one("#status-msg", Static).update(
+            f"{self._result_message}\n\nErrore azione: {exc}"
+        )
+
 
 # ── PyDFApp ───────────────────────────────────────────────────────────────────
 
 class PyDFApp(App):
     CSS_PATH = "tui.tcss"
 
+    def __init__(
+        self,
+        *,
+        show_startup_checks: bool = True,
+        preferences: Preferences | None = None,
+        global_system_report: SystemCheckReport | None = None,
+    ) -> None:
+        super().__init__()
+        self._show_startup_checks = show_startup_checks
+        self.preferences = preferences if preferences is not None else load_preferences()
+        self.global_system_report = (
+            global_system_report
+            if global_system_report is not None
+            else check_global_systems()
+        )
+
     def on_mount(self) -> None:
         self.push_screen(HomeScreen())
+        if self._show_startup_checks and not self.global_system_report.ok:
+            self.push_screen(
+                SystemCheckScreen(
+                    self.global_system_report,
+                    title="Prerequisiti mancanti",
+                )
+            )
+
+    def save_preferences(self) -> None:
+        try:
+            save_preferences(self.preferences)
+        except OSError:
+            pass
+
+    def remember_path(self, path: str | Path) -> None:
+        self.preferences = self.preferences.remember_path(path)
+        self.save_preferences()
+
+    def set_ocr_language(self, language: str) -> None:
+        self.preferences = self.preferences.with_ocr_language(language)
+        self.save_preferences()
+
+    def set_compression_level(self, level: str) -> None:
+        self.preferences = self.preferences.with_compression_level(level)
+        self.save_preferences()
+
+    def ensure_operation_available(self, operation: str) -> bool:
+        report = check_operation_systems(operation)
+        if report.ok:
+            return True
+        self.push_screen(
+            SystemCheckScreen(
+                report,
+                title="Prerequisiti mancanti",
+            )
+        )
+        return False
 
 
 # ── Entry points pubblici ─────────────────────────────────────────────────────
