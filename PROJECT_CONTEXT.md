@@ -258,6 +258,12 @@ Il comando con `python3` di sistema non è sufficiente se `textual` non è insta
 - compressione con staging e supporto path Unicode
 - naming incrementale degli output
 
+### Fix applicati (2026-04-11) — Cleanup & Refactoring
+
+Task completati (subagent-driven):
+
+- **Task 1 completato**: rimosso `_HEADER_TEXT` (tui.py), return irraggiungibile in `human_size` (utils.py), regole CSS `.step-indicator` e `#btn-run-ocr:focus` (tui.tcss), `resolve_user_path` ridondante (compress.py). Suite test: 43/43 verde.
+
 ### Ultima sessione Codex
 
 Sessione del `2026-03-31` svolta da `Codex`.
