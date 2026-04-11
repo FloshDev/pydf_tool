@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import io
 import os
@@ -31,7 +30,6 @@ from pydf_tool.tui import (
     ProgressScreen,
     PyDFApp,
     WizardScreen,
-    run_interactive_app,
 )
 from pydf_tool.utils import ensure_pdf_input, resolve_user_path
 
@@ -228,13 +226,7 @@ class PathNormalizationTestCase(unittest.TestCase):
 
 class TUIScreenTestCase(unittest.TestCase):
     def _make_app(self) -> PyDFApp:
-        def parser_factory() -> argparse.ArgumentParser:
-            return argparse.ArgumentParser()
-
-        def executor(_namespace: argparse.Namespace) -> int:
-            return 0
-
-        return PyDFApp(parser_factory=parser_factory, executor=executor)
+        return PyDFApp()
 
     def test_home_menu_shows_ocr_compress_and_help(self) -> None:
         async def scenario() -> None:

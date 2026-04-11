@@ -822,28 +822,15 @@ class ProgressScreen(Screen):
 class PyDFApp(App):
     CSS_PATH = "tui.tcss"
 
-    def __init__(
-        self,
-        parser_factory: Callable[[], argparse.ArgumentParser],
-        executor: Callable[[argparse.Namespace], int],
-    ) -> None:
-        super().__init__()
-        self._parser_factory = parser_factory
-        self._executor = executor
-
     def on_mount(self) -> None:
         self.push_screen(HomeScreen())
 
 
 # ── Entry points pubblici ─────────────────────────────────────────────────────
 
-def run_interactive_app(
-    *,
-    parser_factory: Callable[[], argparse.ArgumentParser],
-    executor: Callable[[argparse.Namespace], int],
-) -> int:
-    """Entry point TUI. Firma invariata — cli.py non cambia."""
-    app = PyDFApp(parser_factory=parser_factory, executor=executor)
+def run_interactive_app() -> int:
+    """Entry point TUI."""
+    app = PyDFApp()
     app.run()
     return 0
 

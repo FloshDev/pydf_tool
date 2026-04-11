@@ -194,10 +194,7 @@ def _dispatch_interactive_command(command_line: str) -> int:
 def _run_interactive_shell() -> int:
     from .tui import run_interactive_app
 
-    return run_interactive_app(
-        parser_factory=build_parser,
-        executor=_execute_handler,
-    )
+    return run_interactive_app()
 
 
 def _run_interactive_shell_safe() -> int:
