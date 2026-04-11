@@ -10,7 +10,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from textual.widgets import Input, ListView
+from textual.widgets import Input, ListView, Static
 
 from pydf_tool.check_ocr import CheckOCRResult, check_ocr
 from pydf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
@@ -23,7 +23,9 @@ from pydf_tool.errors import PDFToolError
 from pydf_tool.ocr import OCRResult, resolve_ocr_output_path, resolve_tesseract_languages
 from pydf_tool.ocr import run_ocr
 from pydf_tool.tui import (
+    CheckInputScreen,
     CheckResultScreen,
+    HelpScreen,
     HomeScreen,
     MenuEntryItem,
     OCRMenuScreen,
@@ -426,6 +428,114 @@ class TUIScreenTestCase(unittest.TestCase):
 
                 self.assertIsInstance(app.screen, HomeScreen)
                 self.assertEqual(len(app.screen_stack), 2)
+
+        asyncio.run(scenario())
+
+    def test_progress_screen_footer_shows_cancel_hint_on_mount(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                progress = ProgressScreen(
+                    mode="compress",
+                    args={
+                        "input": Path("/tmp/input.pdf"),
+                        "level": "medium",
+                        "grayscale": False,
+                        "output": Path("/tmp/output.pdf"),
+                    },
+                )
+                progress._run_operation = lambda: None  # type: ignore[method-assign]
+                app.push_screen(progress)
+                await pilot.pause()
+
+                footer = progress.query_one("#footer-bar", Static)
+                self.assertIn("Ctrl+C", footer.content)
+
+        asyncio.run(scenario())
+
+    def test_wizard_screen_h_opens_help(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                # prefill_path skips the File step (Input) so the first step
+                # rendered is Lingua (ListView), which doesn't consume 'h'
+                wizard = WizardScreen(mode="ocr", prefill_path="/tmp/input.pdf")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                await pilot.press("h")
+                await pilot.pause()
+
+                self.assertIsInstance(app.screen, HelpScreen)
+
+        asyncio.run(scenario())
+
+    def test_wizard_back_navigation_clamps_step_index(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="compress")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values["file"] = "/tmp/input.pdf"
+                wizard._values["livello"] = "custom"
+                wizard.current_step = 2
+                await pilot.pause()
+
+                await pilot.press("escape")
+                await pilot.pause()
+                self.assertEqual(wizard.current_step, 1)
+
+                wizard._values["livello"] = "low"
+                wizard._values.pop("grado", None)
+                await pilot.press("escape")
+                await pilot.pause()
+                self.assertEqual(wizard.current_step, 0)
+
+        asyncio.run(scenario())
+
+    def test_help_screen_has_separate_footer_widget(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                app.push_screen(HelpScreen())
+                await pilot.pause()
+
+                footer = app.screen.query_one("#footer-bar", Static)
+                self.assertIn("Esc", footer.content)
+
+        asyncio.run(scenario())
+
+    def test_launch_ocr_from_check_result_removes_ocr_menu_from_stack(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            async with app.run_test() as pilot:
+                app.push_screen(OCRMenuScreen())
+                await pilot.pause()
+                app.push_screen(CheckInputScreen())
+                await pilot.pause()
+
+                result_screen = CheckResultScreen(
+                    result=CheckOCRResult(
+                        pages_total=1,
+                        pages_with_text=0,
+                        pages_without_text=1,
+                        chars_per_page_avg=0.0,
+                        verdict="ocr_needed",
+                    ),
+                    input_path=Path("/tmp/scan.pdf"),
+                )
+                app.push_screen(result_screen)
+                await pilot.pause()
+
+                self.assertEqual(len(app.screen_stack), 5)
+
+                result_screen._launch_ocr()
+                await pilot.pause()
+
+                self.assertEqual(len(app.screen_stack), 3)
+                self.assertIsInstance(app.screen, WizardScreen)
 
         asyncio.run(scenario())
 

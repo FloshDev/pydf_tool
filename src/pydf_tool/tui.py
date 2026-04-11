@@ -153,10 +153,7 @@ Suggerimenti
   · OCR apre un sottomenu con Verifica OCR e Esegui OCR
   · Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo
   · Esegui OCR in TXT: scegli formato TXT nel flusso guidato
-  · Se annulli una compressione, il file parziale viene rimosso
-
-─────────────────────────────────────────────────
-Invio · Esc · Q chiudono questa schermata"""
+  · Se annulli una compressione, il file parziale viene rimosso"""
 
 _HELP_TEXT_PLAIN = """\
 PyDF Tool — strumenti PDF da riga di comando
@@ -188,6 +185,7 @@ class HelpScreen(ModalScreen):
             Static(_HELP_TEXT, id="help-content"),
             id="help-container",
         )
+        yield Static("Invio · Esc · Q chiudono questa schermata", id="footer-bar")
 
     def action_dismiss_screen(self) -> None:
         self.dismiss()
@@ -405,6 +403,8 @@ _WIZARD_STEPS: dict[str, list[WizardStep]] = {
 class WizardScreen(Screen):
     BINDINGS = [
         Binding("escape", "go_back", "Indietro"),
+        Binding("h", "push_help", "Help"),
+        Binding("f1", "push_help", "Help"),
     ]
 
     current_step: reactive[int] = reactive(0)
@@ -573,9 +573,13 @@ class WizardScreen(Screen):
 
     def action_go_back(self) -> None:
         if self.current_step > 0:
-            self.current_step -= 1
+            new_step = self.current_step - 1
+            self.current_step = min(new_step, len(self._visible_steps()) - 1)
         else:
             self.app.pop_screen()
+
+    def action_push_help(self) -> None:
+        self.app.push_screen(HelpScreen())
 
 
 # ── CheckInputScreen + CheckResultScreen (Phase 4) ────────────────────────────
@@ -713,6 +717,7 @@ class CheckResultScreen(Screen):
     def _launch_ocr(self) -> None:
         self.app.pop_screen()  # pop CheckResultScreen
         self.app.pop_screen()  # pop CheckInputScreen
+        self.app.pop_screen()  # pop OCRMenuScreen
         self.app.push_screen(WizardScreen(mode="ocr", prefill_path=str(self._input_path)))
 
     def _go_home(self) -> None:
@@ -740,7 +745,7 @@ class ProgressScreen(Screen):
         yield ProgressBar(total=100, id="progress-bar", show_eta=False)
         yield Static("", id="elapsed-label")
         yield Static("Ctrl+C per annullare", id="cancel-hint")
-        yield Static("", id="footer-bar")
+        yield Static("Ctrl+C per annullare", id="footer-bar")
 
     def on_mount(self) -> None:
         self._run_operation()
