@@ -264,6 +264,7 @@ Task completati (subagent-driven):
 
 - **Task 1 completato**: rimosso `_HEADER_TEXT` (tui.py), return irraggiungibile in `human_size` (utils.py), regole CSS `.step-indicator` e `#btn-run-ocr:focus` (tui.tcss), `resolve_user_path` ridondante (compress.py). Suite test: 43/43 verde.
 - **Task 2 completato**: `_emit_progress` spostata in `progress.py` come `emit_progress` pubblica; rimossa da `ocr.py` e `compress.py`; 3 nuovi test aggiunti (totale test: 46).
+- **Task 3 completato**: creata `MenuScreen(Screen)` base class; `HomeScreen` e `OCRMenuScreen` la subclassano; rimossi 3 metodi duplicati per classe.
 
 ### Ultima sessione Codex
 
