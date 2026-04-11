@@ -197,6 +197,8 @@ Button {
 Button:focus {
     color: $accent;
     border: solid $accent;
+    border-top: solid $accent;
+    border-bottom: solid $accent;
     background: $surface-soft;
 }
 
@@ -204,10 +206,13 @@ Button:focus {
     text-style: bold;
 }
 
-#btn-home:focus {
+/* Selettore con ID parent — specificità (0,1,1,1) batte Button.-style-default:focus (0,0,2,1) */
+#result-buttons Button:focus {
     background: $surface-soft;
     color: $accent;
     border: solid $accent;
+    border-top: solid $accent;
+    border-bottom: solid $accent;
 }
 
 HelpScreen > ScrollableContainer {

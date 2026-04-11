@@ -56,6 +56,10 @@ Da lì puoi fare tutto con le frecce e Invio.
   COMANDI DIRETTI (senza interfaccia grafica)
 ----------------------------------------------------
 
+Verifica se un PDF ha già testo ricercabile:
+
+  pydf-tool check "documento.pdf"
+
 OCR di un PDF (output: PDF ricercabile):
 
   pydf-tool ocr "documento.pdf" --lang it
