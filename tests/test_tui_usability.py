@@ -193,6 +193,32 @@ class TUIUsabilityTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_wizard_output_step_f2_picker_populates_output_path_and_remembers_directory(self) -> None:
+        async def scenario() -> None:
+            app = self._make_app()
+            selected_directory = Path("/tmp/finder-output")
+            async with app.run_test() as pilot:
+                wizard = WizardScreen(mode="compress")
+                app.push_screen(wizard)
+                await pilot.pause()
+
+                wizard._values["file"] = "/tmp/input.pdf"
+                wizard._values["livello"] = "medium"
+                wizard._values["colore"] = "color"
+                wizard.current_step = 3
+                await pilot.pause()
+
+                with patch("pydf_tool.tui.choose_directory", return_value=selected_directory):
+                    await pilot.press("f2")
+                    await pilot.pause()
+
+                input_widget = wizard.query_one("#step-input", Input)
+                self.assertEqual(input_widget.value, str(selected_directory / "input.1.pdf"))
+                self.assertEqual(app.focused.id if app.focused else None, "step-input")
+                self.assertEqual(app.preferences.last_directory, selected_directory)
+
+        asyncio.run(scenario())
+
     def test_progress_success_shows_open_actions(self) -> None:
         async def scenario() -> None:
             app = self._make_app()

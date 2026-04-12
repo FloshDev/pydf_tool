@@ -8,6 +8,7 @@ from .errors import PDFToolError
 from .utils import resolve_user_path
 
 __all__ = [
+    "choose_directory",
     "choose_pdf_file",
     "is_macos",
     "open_output_folder",
@@ -57,6 +58,48 @@ def choose_pdf_file(
     selected_path = resolve_user_path(selected)
     if selected_path.suffix.lower() != ".pdf":
         raise PDFToolError(f"Il file selezionato non è un PDF: {selected_path}")
+    return selected_path
+
+
+def choose_directory(
+    initial_directory: str | Path | None = None,
+    prompt: str = "Seleziona una cartella",
+) -> Path | None:
+    """Open Finder's folder picker and return a directory path, or None on cancel."""
+
+    _require_macos()
+    default_directory = _coerce_default_directory(initial_directory)
+    command = [
+        "osascript",
+        "-e",
+        _build_choose_directory_script(),
+        prompt.strip() or "Seleziona una cartella",
+        str(default_directory) if default_directory is not None else "",
+    ]
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise PDFToolError("`osascript` non è disponibile su questo sistema.") from exc
+    except subprocess.CalledProcessError as exc:
+        if _is_user_cancelled(exc):
+            return None
+        raise PDFToolError(_format_command_error("Selezione cartella", exc)) from exc
+
+    selected = completed.stdout.strip()
+    if not selected:
+        raise PDFToolError(
+            "Selezione cartella non riuscita: Finder non ha restituito un percorso."
+        )
+
+    selected_path = resolve_user_path(selected)
+    if not selected_path.is_dir():
+        raise PDFToolError(f"La selezione non è una cartella valida: {selected_path}")
     return selected_path
 
 
@@ -115,6 +158,21 @@ def _build_choose_pdf_script() -> str:
         "        set chosenFile to choose file of type {\"com.adobe.pdf\"} with prompt promptText default location (POSIX file defaultLocationPath)\n"
         "    end if\n"
         "    return POSIX path of chosenFile\n"
+        "end run"
+    )
+
+
+def _build_choose_directory_script() -> str:
+    return (
+        "on run argv\n"
+        "    set promptText to item 1 of argv\n"
+        "    set defaultLocationPath to item 2 of argv\n"
+        "    if defaultLocationPath is \"\" then\n"
+        "        set chosenFolder to choose folder with prompt promptText\n"
+        "    else\n"
+        "        set chosenFolder to choose folder with prompt promptText default location (POSIX file defaultLocationPath)\n"
+        "    end if\n"
+        "    return POSIX path of chosenFolder\n"
         "end run"
     )
 

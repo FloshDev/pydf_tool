@@ -238,16 +238,20 @@ La struttura attuale è questa:
 - `PyDFApp` è la classe principale `textual.App`
 - `MenuScreen(Screen)` è la base class dei menu con preview; oggi `HomeScreen` la usa direttamente e `OCRMenuScreen` ne riusa la logica evento pur con layout custom
 - `HomeScreen(MenuScreen)` mostra il menu principale e il pannello anteprima
-- `OCRMenuScreen(MenuScreen)` mostra il sottomenu OCR in forma compatta: lista azioni e preview sotto, coerente col wizard
+- `OCRMenuScreen(MenuScreen)` mostra il sottomenu OCR in forma compatta: lista azioni e preview sotto, coerente col wizard; il ritorno è affidato a `Esc`, non a una voce menu separata
 - `WizardScreen` guida l'utente nei flussi OCR e compressione; supporta H/F1, `F2` per Finder, hint di output e preferenze persistenti
 - `CheckInputScreen` raccoglie il path da analizzare; supporta Finder e ritorno del focus all'input dopo il picker
 - `CheckResultScreen` mostra il verdetto di `check_ocr()`
-- `ProgressScreen` esegue OCR o compressione in un worker thread; a fine operazione espone pulsanti `Apri file`, `Apri cartella`, `Torna al menu`
-- `SystemCheckScreen` mostra i prerequisiti mancanti in modal quando mancano tool esterni
-- `HelpScreen` mostra l'help come modal overlay; ha un widget `#footer-bar` separato fuori dallo `ScrollableContainer`
+- `ProgressScreen` esegue OCR o compressione in un worker thread; a fine operazione espone pulsanti `Apri file`, `Apri cartella`, `Torna al menu` e una riga barra+percentuale dedicata
+- `SystemCheckScreen` mostra i prerequisiti mancanti in modal quando mancano tool esterni, usando la stessa shell visiva delle schermate operative
+- `HelpScreen` mostra l'help come modal overlay; ha un widget `#footer-bar` separato e condivide la stessa grammatica visuale compatta del wizard
 - `PyDFApp` carica preferenze, esegue il preflight iniziale e blocca operazioni non disponibili
 
 Il vantaggio architetturale è importante: non c'è più alternanza tra framework incompatibili sullo stesso terminale. Layout, dialog e progress appartengono tutti allo stesso event loop.
+
+Nota pratica importante per chi tocca la UX: l'integrazione Finder ora passa sia da `choose_pdf_file()` sia da `choose_directory()` in `macos_integration.py`, richiamate da `WizardScreen.action_pick_pdf_from_finder()` e `CheckInputScreen.action_pick_pdf_from_finder()`. Quindi il picker copre la selezione del PDF nei passi `File`, la schermata `check` e anche la scelta della cartella nei passi `Output`. La barra di avanzamento, invece, non dipende solo dal widget `#progress-bar`: la resa percepita nasce dall'insieme `#progress-meter` + `ProgressBar` + CSS in `tui.tcss`, quindi le modifiche visive vanno quasi sempre fatte tra `compose()` e stylesheet insieme. Regola emersa dal feedback visivo reale: nella TUI di questo progetto la coerenza non migliora aggiungendo più box o più etichette, ma togliendo livelli decorativi quando non aggiungono informazione. Allo stesso modo, se una schermata operativa smette di scorrere in finestra stretta, il primo controllo da fare è il `overflow-y` del pannello contenitore, non il singolo widget figlio.
+
+Nota di manutenzione collegata: quando cambia la UX della TUI, va riallineata anche la documentazione utente (`README.md` e `ISTRUZIONI.txt`). Il caso classico emerso in questa repo è il vecchio copy "devi sempre scrivere il percorso completo": non è più vero da quando i picker Finder coprono sia i passi `File` sia i passi `Output`.
 
 ### Worker e aggiornamenti UI
 
@@ -635,7 +639,7 @@ Il `PROJECT_CONTEXT.md` tiene traccia dei limiti ancora aperti. I più important
 
 **OCR non interrompibile dentro la singola pagina**: Tesseract lavora in codice C. Python può fermare il flusso tra una pagina e l'altra, ma non entrare nel mezzo di una chiamata OCR già partita. La TUI resta responsiva, ma la cancellazione non è istantanea su pagine pesanti.
 
-**Gap nei test sulla TUI**: i test attuali (`94` totali sull'intera suite) coprono navigation, wizard, check result, progress screen, picker Finder e preflight. Restano scoperti gli end-to-end con Tesseract o Ghostscript reali e l'integrazione reale con Finder / `open` fuori dai mock.
+**Gap nei test sulla TUI**: i test attuali (`97` totali sull'intera suite) coprono navigation, wizard, check result, progress screen, picker Finder file/cartella e preflight. Restano scoperti gli end-to-end con Tesseract o Ghostscript reali e l'integrazione reale con Finder / `open` fuori dai mock.
 
 **Fragilità del setup**: il pacchetto dichiara supporto `Python 3.10+`, ma `setup.sh` oggi patcha il wrapper puntando a `.venv/bin/python3.12`. È il workflow verificato, ma non è ancora un setup completamente agnostico rispetto alla minor version.
 

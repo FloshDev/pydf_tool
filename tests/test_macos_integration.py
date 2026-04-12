@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from pydf_tool.errors import PDFToolError
 from pydf_tool.macos_integration import (
+    choose_directory,
     choose_pdf_file,
     open_output_folder,
     open_with_default_app,
@@ -95,6 +96,58 @@ class MacOSIntegrationTestCase(unittest.TestCase):
                     choose_pdf_file()
 
         self.assertIn("non è un PDF", str(context.exception))
+
+    def test_choose_directory_returns_selected_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            default_directory = Path(temp_dir, "Inbox")
+            selected_directory = Path(temp_dir, "Output")
+            default_directory.mkdir()
+            selected_directory.mkdir()
+
+            captured: dict[str, list[str]] = {}
+
+            def fake_run(command, check, capture_output, text):
+                captured["command"] = command
+                self.assertEqual(check, True)
+                self.assertEqual(capture_output, True)
+                self.assertEqual(text, True)
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=f"{selected_directory}\n",
+                    stderr="",
+                )
+
+            with patch("pydf_tool.macos_integration.subprocess.run", side_effect=fake_run):
+                result = choose_directory(
+                    initial_directory=default_directory,
+                    prompt="Scegli cartella output",
+                )
+
+        self.assertEqual(result, selected_directory)
+        self.assertEqual(captured["command"][0], "osascript")
+        self.assertIn("choose folder", captured["command"][2])
+        self.assertEqual(captured["command"][3], "Scegli cartella output")
+        self.assertEqual(captured["command"][4], str(default_directory))
+
+    def test_choose_directory_rejects_non_directory_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            selected_file = Path(temp_dir, "selected.pdf")
+            selected_file.write_bytes(b"%PDF-1.4")
+
+            def fake_run(command, check, capture_output, text):
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=f"{selected_file}\n",
+                    stderr="",
+                )
+
+            with patch("pydf_tool.macos_integration.subprocess.run", side_effect=fake_run):
+                with self.assertRaises(PDFToolError) as context:
+                    choose_directory()
+
+        self.assertIn("cartella valida", str(context.exception))
 
     def test_open_with_default_app_uses_open_command(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

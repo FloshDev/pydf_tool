@@ -47,7 +47,9 @@ pydf-tool
 
 Nella TUI attuale:
 
-- nei campi file puoi aprire Finder con `F2` o con il pulsante dedicato
+- `OCR` apre un sottomenu con `Verifica OCR` ed `Esegui OCR`
+- nei passi file e nella verifica OCR puoi aprire Finder con `F2` o con il pulsante dedicato
+- nei passi output puoi usare `F2` per scegliere la cartella di destinazione e il file finale viene proposto automaticamente
 - all'avvio l'app controlla i prerequisiti e segnala subito eventuali mancanze
 - nei wizard OCR e compressione l'output di default resta nella stessa cartella del file di partenza
 - l'app ricorda ultima cartella usata, lingua OCR preferita e livello di compressione preferito
@@ -58,8 +60,9 @@ Controlli principali:
 
 - `↑/↓` naviga tra le opzioni
 - `Enter` conferma
+- `F2` apre Finder quando il campo corrente lo supporta
 - `Esc` torna indietro o esce dai dialog
-- `H` o `F1` apre l'help
+- `H` o `F1` apre l'help nelle schermate che lo supportano
 - `Ctrl+C` interrompe un'operazione in corso
 
 ### CLI diretta
@@ -75,6 +78,10 @@ pydf-tool ocr scansione.pdf --lang it+en --output scansione.txt
 pydf-tool compress documento.pdf --level medium --output output.pdf
 pydf-tool compress documento.pdf --level 65 --output documento-small.pdf
 pydf-tool compress documento.pdf --level medium --grayscale
+
+pydf-tool interactive
+pydf-tool help
+pydf-tool help ocr
 ```
 
 Se `--output` non viene specificato, il file viene creato nella stessa cartella dell'input con un nome incrementale.
@@ -86,6 +93,8 @@ Se `--output` non viene specificato, il file viene creato nella stessa cartella 
 | `check` | Verifica se un PDF contiene già testo ricercabile o se serve OCR |
 | `ocr` | Converte un PDF scansionato in PDF ricercabile o in TXT |
 | `compress` | Comprimi un PDF con preset o livello personalizzato |
+| `interactive` | Apre esplicitamente la TUI interattiva |
+| `help` | Mostra l'aiuto generale o di un sottocomando |
 
 ## Troubleshooting
 

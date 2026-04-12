@@ -256,7 +256,7 @@ class TUIScreenTestCase(unittest.TestCase):
                 self.assertIsInstance(app.screen, OCRMenuScreen)
                 self.assertEqual(
                     [item.id for item in app.screen.query(MenuEntryItem)],
-                    ["check", "ocr", "back"],
+                    ["check", "ocr"],
                 )
                 self.assertEqual(app.focused.id if app.focused else None, "menu-list")
 
@@ -566,6 +566,8 @@ class TUIScreenTestCase(unittest.TestCase):
 
                 bar = progress.query_one("#progress-bar", ProgressBar)
                 self.assertGreater(bar.size.width, 50)
+                inner_bar = progress.query_one("#bar")
+                self.assertGreater(inner_bar.size.width, 50)
 
         asyncio.run(scenario())
 

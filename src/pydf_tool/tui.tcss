@@ -15,34 +15,61 @@ Screen {
     color: $text;
 }
 
-#home-header {
+#home-header,
+#menu-panel,
+#preview-panel,
+#ocr-menu-panel,
+#wizard-panel,
+#check-panel,
+#result-panel,
+#help-panel,
+#progress-panel,
+#system-check-panel {
     border: solid $border;
     background: $surface;
-    padding: 1 2;
+}
+
+#home-header,
+#wizard-panel,
+#check-panel,
+#result-panel,
+#help-panel,
+#progress-panel,
+#system-check-panel {
+    height: 1fr;
+    padding: 0;
+}
+
+#wizard-panel,
+#check-panel,
+#result-panel,
+#progress-panel {
+    overflow-y: auto;
+    scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
+}
+
+#home-header {
     height: auto;
 }
 
-#home-brand {
+#home-brand,
+#wizard-title,
+#header {
     color: $accent;
     text-style: bold;
+    padding: 1 2 0 2;
+    height: auto;
 }
 
 #home-subtitle {
     color: $text;
-    padding-top: 1;
+    padding: 1 2 0 2;
 }
 
 #home-tagline {
     color: $secondary;
-}
-
-#header {
-    color: $accent;
-    border: solid $border;
-    background: $surface;
-    padding: 1 2;
-    height: auto;
-    text-style: bold;
+    padding: 0 2 1 2;
 }
 
 #footer-bar {
@@ -88,8 +115,6 @@ ListView > ListItem.-highlight {
 #menu-panel {
     width: 34;
     height: 1fr;
-    border: solid $border;
-    background: $surface;
     padding: 0;
 }
 
@@ -106,8 +131,6 @@ ListView > ListItem.-highlight {
 #preview-panel {
     width: 1fr;
     height: 1fr;
-    border: solid $border;
-    background: $surface;
     padding: 0;
 }
 
@@ -130,7 +153,7 @@ ListView > ListItem.-highlight {
     text-style: bold;
     background: $surface-soft;
     border-bottom: solid $border;
-    padding: 0 1;
+    padding: 0 2;
     height: auto;
 }
 
@@ -168,7 +191,7 @@ ListView > ListItem.-highlight .menu-item-summary {
     color: $secondary;
     border-top: solid $border;
     background: $surface-soft;
-    padding: 1 1 0 1;
+    padding: 1 2 0 2;
 }
 
 .error-label {
@@ -220,49 +243,38 @@ Button:focus {
     border-bottom: solid $accent;
 }
 
-HelpScreen > ScrollableContainer {
-    border: solid $border;
-    padding: 1 2;
-    background: $surface;
-    overflow-y: auto;
-    scrollbar-size-vertical: 0;
-    scrollbar-size-horizontal: 0;
-}
-
-#wizard-title {
-    color: $accent;
-    text-style: bold;
-    padding: 0 2;
-    border-bottom: solid $border;
-}
-
 #step-indicator {
     color: $secondary;
-    padding: 0 2;
-    height: 1;
+    padding: 1 2 0 2;
+    height: auto;
 }
 
 #step-prompt {
     color: $text;
-    padding: 1 2 0 2;
+    padding: 1 2 1 2;
+    height: auto;
 }
 
 #ocr-menu-panel {
-    border: solid $border;
-    background: $surface;
     height: 1fr;
+    padding: 0;
 }
 
 #ocr-menu-panel #menu-list {
     height: auto;
-    max-height: 12;
-    border-bottom: solid $border;
-    padding-top: 1;
+    max-height: 9;
+}
+
+#ocr-menu-panel #menu-list > ListItem {
+    min-height: 2;
+    margin: 0 1 1 1;
 }
 
 #ocr-menu-preview {
     height: 1fr;
     background: $surface;
+    border-top: solid $border;
+    padding-bottom: 1;
 }
 
 #ocr-preview-title {
@@ -273,20 +285,19 @@ HelpScreen > ScrollableContainer {
 
 #ocr-preview-body {
     color: $text;
-    padding: 1 2;
+    padding: 0 2;
     text-wrap: wrap;
+    height: auto;
 }
 
 #ocr-preview-hint {
     color: $secondary;
-    border-top: solid $border;
-    background: $surface-soft;
-    padding: 0 2;
+    padding: 1 2 0 2;
     height: auto;
 }
 
 #step-input {
-    margin: 0 2;
+    margin: 1 2 0 2;
 }
 
 #finder-button,
@@ -325,47 +336,78 @@ Input:focus {
 #step-hint,
 #check-hint {
     color: $secondary;
-    padding: 0 2;
+    padding: 1 2 0 2;
     height: auto;
 }
 
 #result-table {
     color: $text;
-    padding: 1 2;
+    margin: 1 2 0 2;
+    padding: 0 0 1 0;
+    height: auto;
 }
 
 #result-buttons {
     width: auto;
     height: auto;
-    padding: 0 1 1 1;
+    padding: 0 1 0 1;
 }
 
 #status-msg {
     color: $text;
-    padding: 1 2;
+    margin: 1 2 0 2;
+    padding: 0;
+    height: auto;
+}
+
+#progress-meter {
+    width: 100%;
+    padding: 1 2 0 2;
+    height: auto;
 }
 
 #progress-bar {
-    width: 100%;
-    margin: 0 2 1 2;
+    width: 1fr;
+    margin: 0 1 0 0;
+}
+
+#progress-bar > #bar {
+    width: 1fr;
+}
+
+#progress-percent {
+    color: $accent;
+    text-style: bold;
+    width: 4;
+    padding-top: 1;
 }
 
 #progress-result-buttons,
 #system-check-buttons {
     width: auto;
     height: auto;
-    padding: 0 1 1 1;
+    padding: 0 1 0 1;
 }
 
+#help-container,
 #system-check-container {
-    border: solid $border;
-    padding: 1 2;
-    background: $surface;
+    margin: 0 2;
+    padding: 0 0 1 0;
+    background: transparent;
     overflow-y: auto;
     scrollbar-size-vertical: 0;
     scrollbar-size-horizontal: 0;
+    height: 1fr;
+}
+
+#system-check-container {
+    margin-top: 1;
 }
 
 #system-check-content {
+    color: $text;
+}
+
+#help-content {
     color: $text;
 }

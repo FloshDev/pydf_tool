@@ -47,8 +47,10 @@ Da lì puoi fare tutto con le frecce e Invio.
 
   Frecce su/giù   — sposta la selezione nel menu
   Invio           — conferma / apre l'azione selezionata
-  H oppure F1     — apre la schermata di aiuto
-  Esc oppure Q    — annulla / torna indietro / esci
+  F2              — apre Finder nei campi file/cartella supportati
+  H oppure F1     — apre la schermata di aiuto dove disponibile
+  Esc             — torna indietro / annulla / chiude dialog
+  Q               — esce dalla home
   Ctrl+C          — interrompe un'operazione in corso
 
 
@@ -82,7 +84,7 @@ Compressione con livello personalizzato (1-100):
 
   pydf-tool compress "documento.pdf" --level 65
 
-Compressione con conversione in bianco e nero:
+Compressione con conversione in scala di grigi:
 
   pydf-tool compress "documento.pdf" --level medium --grayscale
 
@@ -97,6 +99,8 @@ cartella dell'originale con un nome tipo "documento.1.pdf".
 Aiuto generale:
 
   pydf-tool --help
+  pydf-tool interactive
+  pydf-tool help
   pydf-tool help ocr
   pydf-tool help compress
 
@@ -127,7 +131,16 @@ un file più grande dell'originale. È normale.
   INSERIRE I PERCORSI DEI FILE NELLA TUI
 ----------------------------------------------------
 
-IMPORTANTE: nella TUI devi sempre scrivere il percorso
+Nella TUI puoi fare in due modi:
+
+  1. scrivere il percorso completo del file
+  2. usare Finder con F2 o con il pulsante dedicato
+
+Nei passi Output dei wizard, F2 apre invece il selettore
+cartella: scegli la destinazione e il tool compone da solo
+il nome finale del file.
+
+Se scrivi a mano il percorso, devi usare il percorso
 COMPLETO del file PDF, non solo il nome.
 
   SBAGLIATO: documento.pdf
@@ -143,6 +156,10 @@ Per trovare il percorso completo su macOS:
 Oppure trascina il file sul terminale (fuori dalla TUI)
 prima di avviare pydf-tool: il percorso apparirà nel
 terminale e potrai copiarlo.
+
+Nel flusso OCR ricorda che entri prima in un sottomenu:
+  - Verifica OCR
+  - Esegui OCR
 
 
 ----------------------------------------------------
@@ -190,6 +207,10 @@ non si avvia più, esegui questi comandi nell'ordine:
 Poi verifica che funzioni:
 
   pydf-tool --help
+
+Verifica completa della suite test:
+
+  PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 
 
 ----------------------------------------------------

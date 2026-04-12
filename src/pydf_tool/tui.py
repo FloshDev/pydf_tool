@@ -19,7 +19,12 @@ from textual.widgets import Button, Input, ListItem, ListView, ProgressBar, Stat
 from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
-from .macos_integration import choose_pdf_file, open_output_folder, open_with_default_app
+from .macos_integration import (
+    choose_directory,
+    choose_pdf_file,
+    open_output_folder,
+    open_with_default_app,
+)
 from .ocr import OCRResult, run_ocr
 from .preferences import Preferences, load_preferences, save_preferences
 from .progress import OperationProgress
@@ -114,22 +119,13 @@ _OCR_MENU_ITEMS: list[MenuEntry] = [
         ),
         preview_hint="Invio apre il wizard OCR",
     ),
-    MenuEntry(
-        key="back",
-        title="Torna al menu",
-        summary="Rientra nella home principale del launcher.",
-        preview_title="Ritorno alla home",
-        preview_body=(
-            "Chiude il sottomenu OCR e riporta al launcher principale."
-        ),
-        preview_hint="Invio torna alla home",
-    ),
 ]
 
 _FOOTER_HOME = "↑↓ naviga   Invio apre   H/F1 help   Q/Esc esci"
 _FOOTER_SUBMENU = "↑↓ naviga   Invio apre   Esc torna indietro"
 _FOOTER_WIZARD_INPUT = "Invio avanza   Esc torna indietro"
 _FOOTER_WIZARD_FILE = "Invio avanza   F2 Finder   Esc torna indietro"
+_FOOTER_WIZARD_OUTPUT = "Invio avanza   F2 cartella   Esc torna indietro"
 _FOOTER_WIZARD_CHOICE = "↑↓ seleziona   Invio conferma   Esc torna indietro"
 _FOOTER_CHECK_INPUT = "Invio conferma   F2 Finder   Esc annulla"
 _FOOTER_RESULT_ACTIONS = "↑↓ cambia pulsante   Invio conferma   Esc torna al menu"
@@ -185,6 +181,27 @@ def _preferences_for_app(app: App) -> Preferences:
     return cast("PyDFApp", app).preferences
 
 
+def _resolve_output_extension(mode: str, values: dict[str, str]) -> str:
+    if mode == "ocr" and values.get("formato") == "txt":
+        return ".txt"
+    return ".pdf"
+
+
+def _suggest_output_path_in_directory(
+    input_path: Path,
+    directory: str | Path,
+    extension: str,
+) -> Path:
+    target_directory = resolve_user_path(directory)
+    input_resolved = input_path.resolve(strict=False)
+    index = 1
+    while True:
+        candidate = target_directory / f"{input_path.stem}.{index}{extension}"
+        if candidate.resolve(strict=False) != input_resolved and not candidate.exists():
+            return candidate
+        index += 1
+
+
 class SystemCheckScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "dismiss_screen", "Chiudi"),
@@ -198,13 +215,18 @@ class SystemCheckScreen(ModalScreen):
         self._title = title
 
     def compose(self) -> ComposeResult:
-        yield Static(self._title, id="header")
-        yield ScrollableContainer(
-            Static(self._report.message, id="system-check-content"),
-            id="system-check-container",
-        )
-        with Vertical(id="system-check-buttons"):
-            yield Button("Chiudi", id="btn-close-system-check")
+        with Vertical(id="system-check-panel"):
+            yield Static(self._title, id="wizard-title")
+            yield Static(
+                "Alcuni strumenti esterni non sono disponibili in questo ambiente.",
+                id="step-prompt",
+            )
+            yield ScrollableContainer(
+                Static(self._report.message, id="system-check-content"),
+                id="system-check-container",
+            )
+            with Vertical(id="system-check-buttons"):
+                yield Button("Chiudi", id="btn-close-system-check")
         yield Static("Invio · Esc · Q chiudono questa schermata", id="footer-bar")
 
     def on_mount(self) -> None:
@@ -228,10 +250,16 @@ class HelpScreen(ModalScreen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield ScrollableContainer(
-            Static(_HELP_TEXT, id="help-content"),
-            id="help-container",
-        )
+        with Vertical(id="help-panel"):
+            yield Static("Help", id="wizard-title")
+            yield Static(
+                "Flussi supportati, controlli rapidi e suggerimenti operativi.",
+                id="step-prompt",
+            )
+            yield ScrollableContainer(
+                Static(_HELP_TEXT, id="help-content"),
+                id="help-container",
+            )
         yield Static("Invio · Esc · Q chiudono questa schermata", id="footer-bar")
 
     def action_dismiss_screen(self) -> None:
@@ -300,12 +328,12 @@ class HomeScreen(MenuScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="home-header"):
-            yield Static("╠══ PyDF Tool ══╣", id="home-brand")
+            yield Static("PyDF Tool", id="home-brand")
             yield Static(
-                "tool da terminale per operazioni su PDF",
+                "Tool da terminale per operazioni su PDF",
                 id="home-subtitle",
             )
-            yield Static("scegli uno strumento per continuare", id="home-tagline")
+            yield Static("Scegli uno strumento per continuare.", id="home-tagline")
         with Horizontal(id="body"):
             with Vertical(id="menu-panel"):
                 yield Static("Strumenti", classes="panel-title")
@@ -384,8 +412,6 @@ class OCRMenuScreen(MenuScreen):
             if not cast("PyDFApp", self.app).ensure_operation_available("ocr"):
                 return
             self.app.push_screen(WizardScreen(mode="ocr"))
-        else:
-            self.app.pop_screen()
 
     def action_go_back(self) -> None:
         self.app.pop_screen()
@@ -485,14 +511,15 @@ class WizardScreen(Screen):
 
     def compose(self) -> ComposeResult:
         title = "Esegui OCR" if self._mode == "ocr" else "Comprimi PDF"
-        yield Static("", id="step-indicator")
-        yield Static(title, id="wizard-title")
-        yield Static("", id="step-prompt")
-        yield Input(id="step-input")
-        yield Button("Scegli PDF da Finder", id="finder-button")
-        yield ListView(id="step-choices")
-        yield Static("", id="step-hint")
-        yield Static("", id="step-error", classes="error-label")
+        with Vertical(id="wizard-panel"):
+            yield Static("", id="step-indicator")
+            yield Static(title, id="wizard-title")
+            yield Static("", id="step-prompt")
+            yield Input(id="step-input")
+            yield Button("Scegli PDF da Finder", id="finder-button")
+            yield ListView(id="step-choices")
+            yield Static("", id="step-hint")
+            yield Static("", id="step-error", classes="error-label")
         yield Static("", id="footer-bar")
 
     def on_mount(self) -> None:
@@ -562,18 +589,27 @@ class WizardScreen(Screen):
             inp.value = self._values.get(current.name.lower(), "")
             inp.focus()
             is_file_step = current.name == "File"
-            finder_button.display = is_file_step
-            self.query_one("#footer-bar", Static).update(
-                _FOOTER_WIZARD_FILE if is_file_step else _FOOTER_WIZARD_INPUT
+            is_output_step = current.name == "Output"
+            finder_button.display = is_file_step or is_output_step
+            finder_button.label = (
+                "Scegli PDF da Finder"
+                if is_file_step
+                else "Scegli cartella da Finder"
             )
+            footer_text = _FOOTER_WIZARD_INPUT
+            if is_file_step:
+                footer_text = _FOOTER_WIZARD_FILE
+            elif is_output_step:
+                footer_text = _FOOTER_WIZARD_OUTPUT
+            self.query_one("#footer-bar", Static).update(footer_text)
             hint_text = self._step_hint_text(current)
             hint.update(hint_text)
             hint.display = bool(hint_text)
         self.query_one("#step-error", Static).update("")
 
     def _resolve_input_placeholder(self, step: WizardStep) -> str:
-        if self._mode == "ocr" and step.name == "Output":
-            extension = ".txt" if self._values.get("formato") == "txt" else ".pdf"
+        if step.name == "Output":
+            extension = _resolve_output_extension(self._mode, self._values)
             return (
                 f"es. ~/Desktop/out{extension} "
                 "(vuoto = stessa cartella del file di partenza)"
@@ -592,18 +628,32 @@ class WizardScreen(Screen):
         if step.name == "Output":
             suggestion = self._suggested_output_path()
             if suggestion is not None:
-                return f"Lascia vuoto per usare: {_display_path(suggestion)}"
+                return (
+                    "F2 sceglie la cartella di destinazione.\n"
+                    f"Vuoto usa: {_display_path(suggestion)}"
+                )
         return ""
 
-    def _suggested_output_path(self) -> Path | None:
+    def _suggested_output_path(self, directory: str | Path | None = None) -> Path | None:
         file_value = self._values.get("file", "").strip()
         if not file_value:
             return None
         input_path = resolve_user_path(file_value)
-        if self._mode == "ocr":
-            extension = ".txt" if self._values.get("formato") == "txt" else ".pdf"
-            return resolve_incremental_output_path(input_path, extension)
-        return resolve_incremental_output_path(input_path, ".pdf")
+        extension = _resolve_output_extension(self._mode, self._values)
+        if directory is not None:
+            return _suggest_output_path_in_directory(input_path, directory, extension)
+        return resolve_incremental_output_path(input_path, extension)
+
+    def _finder_initial_directory(self, step_name: str) -> Path | None:
+        preferences = _preferences_for_app(self.app)
+        if step_name == "Output":
+            output_value = self._values.get("output", "").strip()
+            if output_value:
+                return resolve_user_path(output_value)
+            file_value = self._values.get("file", "").strip()
+            if file_value:
+                return resolve_user_path(file_value).parent
+        return preferences.last_directory
 
     def _focus_choice_value(self, value: str) -> None:
         step = self._visible_steps()[self.current_step]
@@ -640,7 +690,7 @@ class WizardScreen(Screen):
 
     def on_key(self, event: events.Key) -> None:
         current_step = self._visible_steps()[self.current_step]
-        if current_step.name != "File" or current_step.choices:
+        if current_step.choices or current_step.name not in {"File", "Output"}:
             return
         if event.key in {"down", "tab"}:
             event.stop()
@@ -717,13 +767,19 @@ class WizardScreen(Screen):
 
     def action_pick_pdf_from_finder(self) -> None:
         current_step = self._visible_steps()[self.current_step]
-        if current_step.name != "File":
+        if current_step.name not in {"File", "Output"}:
             return
         try:
-            selected = choose_pdf_file(
-                initial_directory=_preferences_for_app(self.app).last_directory,
-                prompt=current_step.prompt,
-            )
+            if current_step.name == "File":
+                selected = choose_pdf_file(
+                    initial_directory=self._finder_initial_directory(current_step.name),
+                    prompt=current_step.prompt,
+                )
+            else:
+                selected = choose_directory(
+                    initial_directory=self._finder_initial_directory(current_step.name),
+                    prompt="Seleziona la cartella di destinazione",
+                )
         except PDFToolError as exc:
             self.query_one("#step-error", Static).update(str(exc))
             return
@@ -732,9 +788,19 @@ class WizardScreen(Screen):
             return
 
         input_widget = self.query_one("#step-input", Input)
-        input_widget.value = str(selected)
+        if current_step.name == "Output":
+            suggestion = self._suggested_output_path(selected)
+            if suggestion is None:
+                self.query_one("#step-error", Static).update(
+                    "Seleziona prima il PDF di input."
+                )
+                return
+            input_widget.value = str(suggestion)
+            cast("PyDFApp", self.app).remember_path(selected)
+        else:
+            input_widget.value = str(selected)
+            cast("PyDFApp", self.app).remember_path(selected)
         input_widget.focus()
-        cast("PyDFApp", self.app).remember_path(selected)
         hint = self.query_one("#step-hint", Static)
         hint.update(self._step_hint_text(current_step))
         hint.display = bool(hint.content)
@@ -812,12 +878,13 @@ class CheckInputScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static("Verifica OCR", id="wizard-title")
-        yield Static("Percorso del PDF da verificare:", id="step-prompt")
-        yield Input(placeholder="es. ~/Documents/doc.pdf", id="check-input")
-        yield Button("Scegli PDF da Finder", id="check-picker-button")
-        yield Static("", id="check-hint")
-        yield Static("", id="check-error", classes="error-label")
+        with Vertical(id="check-panel"):
+            yield Static("Verifica OCR", id="wizard-title")
+            yield Static("Percorso del PDF da verificare:", id="step-prompt")
+            yield Input(placeholder="es. ~/Documents/doc.pdf", id="check-input")
+            yield Button("Scegli PDF da Finder", id="check-picker-button")
+            yield Static("", id="check-hint")
+            yield Static("", id="check-error", classes="error-label")
         yield Static(_FOOTER_CHECK_INPUT, id="footer-bar")
 
     def on_mount(self) -> None:
@@ -934,15 +1001,16 @@ class CheckResultScreen(Screen):
             f"Pagine totali          {r.pages_total}\n"
             f"Pagine con testo       {r.pages_with_text}\n"
             f"Pagine senza testo     {r.pages_without_text}\n"
-            f"Media caratteri/pag.   {r.chars_per_page_avg:.0f}\n\n"
-            f"Verdetto: {_verdict_label(r.verdict)}"
+            f"Media caratteri/pag.   {r.chars_per_page_avg:.0f}"
         )
-        yield Static("Verifica OCR — risultato", id="header")
-        yield Static(table, id="result-table")
-        with Vertical(id="result-buttons"):
-            if r.verdict in ("ocr_needed", "mixed"):
-                yield Button("Esegui OCR su questo file", id="btn-run-ocr")
-            yield Button("Torna al menu", id="btn-home")
+        with Vertical(id="result-panel"):
+            yield Static("Verifica OCR", id="wizard-title")
+            yield Static(f"Risultato: {_verdict_label(r.verdict)}", id="step-prompt")
+            yield Static(table, id="result-table")
+            with Vertical(id="result-buttons"):
+                if r.verdict in ("ocr_needed", "mixed"):
+                    yield Button("Esegui OCR su questo file", id="btn-run-ocr")
+                yield Button("Torna al menu", id="btn-home")
         yield Static("↑↓ cambia pulsante   Invio conferma   Esc torna al menu", id="footer-bar")
 
     def on_mount(self) -> None:
@@ -1034,13 +1102,22 @@ class ProgressScreen(Screen):
 
     def compose(self) -> ComposeResult:
         title = "Esegui OCR" if self._mode == "ocr" else "Comprimi PDF"
-        yield Static(f"PyDF Tool — {title}", id="header")
-        yield Static("Avvio in corso...", id="status-msg")
-        yield ProgressBar(total=100, id="progress-bar", show_eta=False)
-        with Vertical(id="progress-result-buttons"):
-            yield Button("Apri file", id="btn-open-file")
-            yield Button("Apri cartella", id="btn-open-folder")
-            yield Button("Torna al menu", id="btn-progress-home")
+        with Vertical(id="progress-panel"):
+            yield Static("Preparazione", id="step-indicator")
+            yield Static(title, id="wizard-title")
+            yield Static("Avvio in corso...", id="status-msg")
+            with Horizontal(id="progress-meter"):
+                yield ProgressBar(
+                    total=100,
+                    id="progress-bar",
+                    show_eta=False,
+                    show_percentage=False,
+                )
+                yield Static("0%", id="progress-percent")
+            with Vertical(id="progress-result-buttons"):
+                yield Button("Apri file", id="btn-open-file")
+                yield Button("Apri cartella", id="btn-open-folder")
+                yield Button("Torna al menu", id="btn-progress-home")
         yield Static("Ctrl+C per annullare", id="footer-bar")
 
     def on_mount(self) -> None:
@@ -1078,10 +1155,26 @@ class ProgressScreen(Screen):
             self.app.call_from_thread(self._on_error, str(e))
 
     def _on_progress(self, p: OperationProgress) -> None:
+        stage_labels = {
+            "prepare": "Preparazione",
+            "render": "Rendering",
+            "ocr": "OCR",
+            "compress": "Compressione",
+            "finalize": "Salvataggio",
+            "done": "Completato",
+        }
+        self.query_one("#step-indicator", Static).update(
+            stage_labels.get(p.stage, "Operazione in corso")
+        )
         self.query_one("#status-msg", Static).update(p.message)
+        percent_label = self.query_one("#progress-percent", Static)
         if p.total:
             bar = self.query_one("#progress-bar", ProgressBar)
             bar.update(total=p.total, progress=p.completed)
+            percent = round((p.completed / p.total) * 100)
+            percent_label.update(f"{percent}%")
+        else:
+            percent_label.update("...")
 
     def _on_success_ocr(self, result: OCRResult) -> None:
         cast("PyDFApp", self.app).remember_path(result.output_path)
@@ -1128,7 +1221,10 @@ class ProgressScreen(Screen):
         cancelled: bool = False,
         output_path: Path | None = None,
     ) -> None:
-        self.query_one("#progress-bar", ProgressBar).display = False
+        self.query_one("#step-indicator", Static).update(
+            "Completato" if success else "Annullato" if cancelled else "Errore"
+        )
+        self.query_one("#progress-meter", Horizontal).display = False
         self.query_one("#status-msg", Static).update(text)
         self._result_message = text
         self._result_path = output_path
