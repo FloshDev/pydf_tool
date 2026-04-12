@@ -1,5 +1,5 @@
 ====================================================
-  PYDF TOOL — ISTRUZIONI D'USO
+  PYDF TOOL — ISTRUZIONI D'USO  (beta locale)
 ====================================================
 
 Cosa fa questo tool:
@@ -7,27 +7,140 @@ Cosa fa questo tool:
     con testo ricercabile, oppure in un file di testo .txt
   - Compressione: riduce il peso di un PDF con vari livelli
     di qualità
+  - Verifica: controlla se un PDF contiene già testo ricercabile
+
+
+====================================================
+  PRIMA INSTALLAZIONE
+====================================================
+
+Segui questi passi nell'ordine. Servono circa 10-15 minuti.
 
 
 ----------------------------------------------------
-  PREREQUISITI (da fare una volta sola)
+  PASSO 1 — Homebrew (gestore pacchetti macOS)
 ----------------------------------------------------
 
-Installa le dipendenze di sistema con Homebrew:
+Apri Terminal e controlla se Homebrew è già installato:
+
+  brew --version
+
+Se il comando non viene riconosciuto, installa Homebrew:
+
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+Segui le istruzioni a schermo. Alla fine rilancia Terminal.
+
+
+----------------------------------------------------
+  PASSO 2 — Python 3.12 (da python.org)
+----------------------------------------------------
+
+Scarica l'installer da:
+
+  https://www.python.org/downloads/macos/
+
+Installa la versione 3.12.x più recente (pkg per macOS).
+Dopo l'installazione verifica:
+
+  python3 --version
+
+Deve rispondere "Python 3.12.x".
+
+
+----------------------------------------------------
+  PASSO 3 — Dipendenze OCR e PDF
+----------------------------------------------------
+
+Nel Terminale:
 
   brew install tesseract tesseract-lang poppler ghostscript
 
-Poi configura il progetto (vedi sezione SETUP più in basso).
+Questa operazione può richiedere qualche minuto.
 
 
 ----------------------------------------------------
-  AVVIO RAPIDO (uso quotidiano)
+  PASSO 4 — Scarica il progetto
 ----------------------------------------------------
 
-1. Apri il terminale
+Scegli una cartella dove mettere il progetto (es. Desktop)
+e clona il repository:
+
+  cd ~/Desktop
+  git clone https://github.com/FloshDev/pydf_tool.git "PyDF Tool"
+  cd "PyDF Tool"
+
+Oppure scarica lo zip dalla pagina GitHub e decomprimi.
+
+
+----------------------------------------------------
+  PASSO 5 — Configura l'ambiente
+----------------------------------------------------
+
+Dalla cartella del progetto:
+
+  bash setup.sh
+
+Il setup installa le dipendenze Python e configura il tool.
+Al termine vedrai "Setup completato."
+
+Attiva l'ambiente virtuale:
+
+  source .venv/bin/activate
+
+
+----------------------------------------------------
+  PASSO 6 — Verifica
+----------------------------------------------------
+
+  pydf-tool --help
+
+Deve rispondere con la lista dei comandi disponibili.
+
+
+----------------------------------------------------
+  PASSO 7 — Launcher dal Finder (opzionale)
+----------------------------------------------------
+
+Se vuoi aprire il tool con doppio click dal Finder
+invece che dal terminale:
+
+  scripts/build_macos_launcher.sh
+
+Il bundle viene creato in:
+
+  dist/PyDF Tool.app
+
+Aprilo con doppio click. Il launcher:
+  - apre Terminal
+  - attiva la .venv della repo corrente
+  - lancia pydf-tool
+
+Nota: non è un'app standalone. Se sposti la cartella
+del progetto o ricrei la .venv, rigenera il launcher.
+
+
+====================================================
+  USO QUOTIDIANO
+====================================================
+
+----------------------------------------------------
+  Con il launcher .app
+----------------------------------------------------
+
+Doppio click su "dist/PyDF Tool.app" dal Finder.
+Si apre Terminal con la TUI già avviata.
+
+
+----------------------------------------------------
+  Dal terminale
+----------------------------------------------------
+
+1. Apri Terminal
 2. Spostati nella cartella del progetto:
 
-     cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+     cd ~/Desktop/"PyDF Tool"
+     (sostituisci con il percorso dove hai messo il progetto)
 
 3. Attiva l'ambiente virtuale:
 
@@ -41,32 +154,9 @@ Vedrai apparire l'interfaccia interattiva (TUI).
 Da lì puoi fare tutto con le frecce e Invio.
 
 
-----------------------------------------------------
-  LAUNCHER BETA LOCALE (.APP)
-----------------------------------------------------
-
-Se vuoi aprire PyDF Tool dal Finder con icona dedicata:
-
-  cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
-  scripts/build_macos_launcher.sh
-
-Il bundle viene creato qui:
-
-  dist/PyDF Tool.app
-
-Puoi aprirlo con doppio click dal Finder. Il launcher:
-  - apre Terminal
-  - attiva la .venv della repo corrente
-  - lancia pydf-tool
-
-Nota importante:
-  non è un'app standalone. Se sposti la cartella del progetto
-  o ricrei la .venv, conviene rigenerare il launcher.
-
-
-----------------------------------------------------
+====================================================
   NAVIGAZIONE NELL'INTERFACCIA (TUI)
-----------------------------------------------------
+====================================================
 
   Frecce su/giù   — sposta la selezione nel menu
   Invio           — conferma / apre l'azione selezionata
@@ -77,9 +167,9 @@ Nota importante:
   Ctrl+C          — interrompe un'operazione in corso
 
 
-----------------------------------------------------
+====================================================
   COMANDI DIRETTI (senza interfaccia grafica)
-----------------------------------------------------
+====================================================
 
 Verifica se un PDF ha già testo ricercabile:
 
@@ -128,18 +218,18 @@ Aiuto generale:
   pydf-tool help compress
 
 
-----------------------------------------------------
+====================================================
   LINGUE OCR DISPONIBILI
-----------------------------------------------------
+====================================================
 
   it      Italiano
   en      Inglese
   it+en   Italiano + Inglese insieme
 
 
-----------------------------------------------------
+====================================================
   LIVELLI DI COMPRESSIONE
-----------------------------------------------------
+====================================================
 
   low     — compressione leggera, qualità alta
   medium  — bilanciato (scelta consigliata)
@@ -150,9 +240,9 @@ Nota: su PDF già ottimizzati la compressione può produrre
 un file più grande dell'originale. È normale.
 
 
-----------------------------------------------------
+====================================================
   INSERIRE I PERCORSI DEI FILE NELLA TUI
-----------------------------------------------------
+====================================================
 
 Nella TUI puoi fare in due modi:
 
@@ -167,7 +257,7 @@ Se scrivi a mano il percorso, devi usare il percorso
 COMPLETO del file PDF, non solo il nome.
 
   SBAGLIATO: documento.pdf
-  GIUSTO:    /Users/flosh/Desktop/documento.pdf
+  GIUSTO:    /Users/tuo_nome/Desktop/documento.pdf
   GIUSTO:    ~/Desktop/documento.pdf
 
 Per trovare il percorso completo su macOS:
@@ -185,88 +275,47 @@ Nel flusso OCR ricorda che entri prima in un sottomenu:
   - Esegui OCR
 
 
-----------------------------------------------------
-  DOPO OGNI MODIFICA AL CODICE
-----------------------------------------------------
+====================================================
+  AGGIORNAMENTO
+====================================================
 
-Dato che il progetto usa l'installazione "editable",
-le modifiche al codice in src/ sono IMMEDIATE — non
-serve reinstallare niente.
+Per aggiornare all'ultima versione:
 
-Passi dopo una modifica:
-
-  1. Esci dalla TUI se è aperta (Esc o Ctrl+C)
-  2. Rilancia il tool:
-
-       pydf-tool
-
-  La modifica è già attiva.
-
-Se invece sono cambiate le DIPENDENZE (pyproject.toml):
-
-  pip install -e .
-  bash setup.sh
-
-Se la venv è da rifare da zero (es. dopo aggiornamento
-di Python, o errore "No module named"):
-
-  cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+  cd ~/Desktop/"PyDF Tool"
+  git pull
   rm -rf .venv && bash setup.sh
   source .venv/bin/activate
 
-
-----------------------------------------------------
-  SETUP (prima installazione o dopo aggiornamenti)
-----------------------------------------------------
-
-Se è la prima volta, o se hai aggiornato Python e il tool
-non si avvia più, esegui questi comandi nell'ordine:
-
-  cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
-  rm -rf .venv
-  bash setup.sh
-  source .venv/bin/activate
-
-Poi verifica che funzioni:
-
-  pydf-tool --help
-
-Se vuoi ricreare anche il launcher Finder:
+Se usi il launcher .app, rigeneralo dopo l'aggiornamento:
 
   scripts/build_macos_launcher.sh
 
-Verifica completa della suite test:
 
-  PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-
-
-----------------------------------------------------
+====================================================
   PROBLEMI COMUNI
-----------------------------------------------------
+====================================================
+
+"pydf-tool: command not found"
+  → L'ambiente virtuale non è attivo. Esegui:
+      source .venv/bin/activate
 
 "No module named 'pydf_tool'" o errore all'avvio
-  → Il wrapper pydf-tool non è aggiornato.
-    Esegui:
-      cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+  → Ricreare l'ambiente dall'inizio:
       rm -rf .venv && bash setup.sh && source .venv/bin/activate
-
-"Dipendenze TUI mancanti"
-  → L'ambiente virtuale non è attivo oppure non è stato
-    riallineato dopo un reinstall. Esegui:
-    source .venv/bin/activate
-    bash setup.sh
 
 "Il launcher .app apre un terminale ma non trova la .venv"
   → Ricrea l'ambiente e poi rigenera il bundle:
-    cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
-    bash setup.sh
-    scripts/build_macos_launcher.sh
+      rm -rf .venv && bash setup.sh
+      scripts/build_macos_launcher.sh
 
 "Tesseract non trovato"
   → Installa con: brew install tesseract tesseract-lang
 
 "Ghostscript non trovato"
   → Installa con: brew install ghostscript
+
+"La TUI segnala prerequisiti mancanti"
+  → Installa o reinstalla le dipendenze Homebrew (vedi Passo 3).
 
 L'OCR sembra bloccato senza fare niente
   → Non è bloccato. L'OCR è lento per natura, specialmente
@@ -277,14 +326,18 @@ Il file compresso è più grande dell'originale
   → È normale su PDF già ottimizzati. Prova un livello
     più alto (es. high o un numero vicino a 100).
 
+macOS mostra "app da sviluppatore non identificato"
+  → Ctrl+click sull'app, poi "Apri" nel menu contestuale.
+    Al prossimo avvio la richiesta non apparirà più.
 
-----------------------------------------------------
+
+====================================================
   NOTE
-----------------------------------------------------
+====================================================
 
-- Il tool funziona solo con la venv attiva.
-  Devi eseguire "source .venv/bin/activate" ogni volta
-  che apri un nuovo terminale.
+- Per usare pydf-tool dal terminale la venv deve essere attiva.
+  Devi eseguire "source .venv/bin/activate" ogni volta che
+  apri un nuovo terminale (a meno che non usi il launcher .app).
 
 - Questo tool è pensato per macOS. Non è testato su
   altri sistemi operativi.
@@ -292,11 +345,6 @@ Il file compresso è più grande dell'originale
 - Il launcher "PyDF Tool.app" è una beta locale:
   usa questa repo e questa .venv, non contiene Python
   o i tool Homebrew al suo interno.
-
-- L'icona canonica del launcher è il file:
-  assets/icon/pydf-tool-icon-1024.png
-  Se la cambi, rigenera il bundle con:
-  scripts/build_macos_launcher.sh
 
 - L'OCR funziona bene su documenti scansionati in modo
   leggibile. Su PDF con testo storto, sbiadito o molto

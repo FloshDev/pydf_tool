@@ -8,7 +8,9 @@ Il progetto è usabile nella sua forma attuale come beta locale su macOS. Le tre
 
 ## Prerequisiti
 
-Serve macOS con Python `3.10+`. Il workflow verificato oggi è quello con Python.org Python `3.12` su macOS, perché `setup.sh` crea la `venv`, installa le dipendenze e applica il workaround necessario al wrapper `pydf-tool`.
+- macOS (testato con Python.org Python `3.12`)
+- [Homebrew](https://brew.sh) — gestore pacchetti macOS
+- [Python 3.12](https://www.python.org/downloads/macos/) da python.org
 
 Dipendenze di sistema via Homebrew:
 
@@ -16,13 +18,14 @@ Dipendenze di sistema via Homebrew:
 brew install tesseract tesseract-lang poppler ghostscript
 ```
 
-`tesseract` serve per l'OCR, `poppler` per la lettura/render delle pagine PDF e `ghostscript` per la compressione. `tesseract-lang` è utile se vuoi i pacchetti lingua aggiuntivi.
+`tesseract` serve per l'OCR, `poppler` per il render delle pagine PDF e `ghostscript` per la compressione.
 
 ## Installazione
 
-Setup consigliato:
-
 ```bash
+git clone https://github.com/FloshDev/pydf_tool.git "PyDF Tool"
+cd "PyDF Tool"
+brew install tesseract tesseract-lang poppler ghostscript
 bash setup.sh
 source .venv/bin/activate
 ```
@@ -141,4 +144,3 @@ source .venv/bin/activate
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Checklist sintetica di rilascio locale: `CHECKLIST_BETA.md`.
