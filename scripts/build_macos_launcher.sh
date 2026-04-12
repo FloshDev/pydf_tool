@@ -39,45 +39,53 @@ PY
 
 cp "$ICON_ICNS" "$RESOURCES_DIR/AppIcon.icns"
 
-cat > "$LAUNCHER_BIN" <<EOF
+# Il launcher usa <<'LAUNCHER_EOF' (quoted) quindi niente espande durante il build.
+# A runtime il launcher calcola REPO_ROOT dinamicamente dalla propria posizione,
+# poi scrive un temp script (con << PYDF_CMD non-quoted) dove $REPO_ROOT espande.
+cat > "$LAUNCHER_BIN" <<'LAUNCHER_EOF'
 #!/bin/bash
 
 set -euo pipefail
 
-REPO_ROOT="$ROOT_DIR"
+# Il launcher sta in: dist/PyDF Tool.app/Contents/MacOS/
+# Il repo root e' 4 livelli sopra.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-TERMINAL_COMMAND=\$(cat <<'CMD'
-cd "$ROOT_DIR"
-printf '\\033]0;PyDF Tool\\007'
+# Scrivi il comando terminale in un temp script (PYDF_CMD non-quoted: $REPO_ROOT espande ora)
+TMPSCRIPT=$(mktemp /tmp/pydf-launch-XXXXXX.sh)
+cat > "$TMPSCRIPT" << PYDF_CMD
+#!/bin/bash
+cd "$REPO_ROOT"
+printf '\033]0;PyDF Tool\007'
 if [ ! -x ".venv/bin/python" ]; then
-    printf '\\nPyDF Tool beta locale\\n\\n'
-    printf 'Ambiente virtuale mancante in: %s/.venv\\n' "$ROOT_DIR"
-    printf 'Esegui prima: cd "%s" && bash setup.sh\\n\\n' "$ROOT_DIR"
-    exec \$SHELL -l
+    printf '\nPyDF Tool beta locale\n\n'
+    printf 'Ambiente virtuale mancante in: %s/.venv\n' "$REPO_ROOT"
+    printf 'Esegui prima: cd "%s" && bash setup.sh\n\n' "$REPO_ROOT"
+    exec $SHELL -l
 fi
-
 source ".venv/bin/activate"
 clear
-printf 'PyDF Tool beta locale\\n'
-printf 'Repo: %s\\n\\n' "$ROOT_DIR"
+printf 'PyDF Tool beta locale\n'
+printf 'Repo: %s\n\n' "$REPO_ROOT"
 ".venv/bin/pydf-tool"
-exit_code=\$?
-printf '\\nPyDF Tool terminato con stato %s\\n' "\$exit_code"
-printf 'La sessione resta aperta in questa finestra.\\n'
-exec \$SHELL -l
-CMD
-)
+exit_code=$?
+printf '\nPyDF Tool terminato con stato %s\n' "$exit_code"
+printf 'La sessione resta aperta in questa finestra.\n'
+exec $SHELL -l
+PYDF_CMD
+chmod +x "$TMPSCRIPT"
 
-osascript - "\$TERMINAL_COMMAND" <<'OSA'
+osascript - "$TMPSCRIPT" <<'OSA'
 on run argv
-    set shellCommand to item 1 of argv
+    set scriptPath to item 1 of argv
     tell application "Terminal"
         activate
-        do script shellCommand
+        do script scriptPath
     end tell
 end run
 OSA
-EOF
+LAUNCHER_EOF
 
 chmod +x "$LAUNCHER_BIN"
 
