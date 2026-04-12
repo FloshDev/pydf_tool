@@ -4,7 +4,7 @@
 
 ## Stato del progetto
 
-Il progetto è usabile nella sua forma attuale come beta locale su macOS. Le tre funzioni principali sono presenti e la TUI supporta flussi più semplici rispetto alla CLI pura. Restano possibili evoluzioni dell'interfaccia, ma il comportamento documentato qui riflette lo stato attuale del codice.
+Il progetto è usabile nella sua forma attuale come beta locale su macOS. Le tre funzioni principali sono presenti, la TUI supporta flussi più semplici rispetto alla CLI pura e la repo include ora anche un launcher `.app` locale con icona dedicata per aprire il tool dal Finder. Restano possibili evoluzioni dell'interfaccia e del packaging, ma il comportamento documentato qui riflette lo stato attuale del codice.
 
 ## Prerequisiti
 
@@ -34,6 +34,22 @@ pydf-tool --help
 ```
 
 Se reinstalli le dipendenze con `pip install -e .`, riesegui anche `bash setup.sh` per riallineare il wrapper e il workaround macOS.
+
+## Launcher macOS
+
+Per costruire il launcher `.app` locale con icona:
+
+```bash
+scripts/build_macos_launcher.sh
+```
+
+Output generati:
+
+- `assets/icon/pydf-tool-icon-1024.png` — master PNG definitivo dell'icona
+- `assets/icon/pydf-tool.icns` — icona macOS generata dal PNG
+- `dist/PyDF Tool.app` — launcher locale apribile dal Finder
+
+Il launcher apre Terminal e lancia `pydf-tool` dentro questa repo con la `.venv` corrente. Non è ancora un'app standalone: se sposti la cartella del progetto o ricrei la `.venv`, conviene rigenerarlo con `scripts/build_macos_launcher.sh`. Se in futuro cambi l'icona, sostituisci prima `assets/icon/pydf-tool-icon-1024.png`.
 
 ## Uso
 
@@ -107,6 +123,9 @@ Installa o reinstalla le dipendenze di sistema con Homebrew.
 **La TUI segnala prerequisiti mancanti**  
 L'app ora fa un controllo iniziale e può bloccare OCR o compressione se manca un tool esterno.
 
+**Il launcher `.app` non parte o apre un terminale con errore sulla `.venv`**  
+Ricrea l'ambiente con `bash setup.sh` e rigenera il bundle con `scripts/build_macos_launcher.sh`.
+
 **Il PDF non viene riconosciuto dall'OCR**  
 Verifica prima con `pydf-tool check documento.pdf`. Se il file è protetto o molto irregolare, l'OCR può fallire.
 
@@ -121,3 +140,5 @@ Test locali con la venv attiva:
 source .venv/bin/activate
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
+
+Checklist sintetica di rilascio locale: `CHECKLIST_BETA.md`.

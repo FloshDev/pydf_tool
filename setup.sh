@@ -16,6 +16,12 @@ echo "==> Installazione dipendenze..."
 source "$VENV/bin/activate"
 pip install -e .
 
+echo "==> Force-reinstall textual (workaround metadata corrotta dopo UF_HIDDEN)..."
+# Su Python.org Python 3.12 / macOS, pip non reinstalla textual se lo trova già
+# registrato con metadata corrotta. Il force-reinstall garantisce che i file .py
+# sorgente vengano scritti prima del passo chflags.
+pip install --force-reinstall --no-deps textual==8.2.3
+
 echo "==> Rimozione flag UF_HIDDEN dai file installati..."
 # Su Python.org Python 3.12 / macOS, python3 -m venv imposta UF_HIDDEN sull'intera
 # cartella .venv. pip installa i file ma alcuni risultano invisibili a Python (e a find)

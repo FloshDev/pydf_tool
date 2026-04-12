@@ -42,6 +42,29 @@ Da lì puoi fare tutto con le frecce e Invio.
 
 
 ----------------------------------------------------
+  LAUNCHER BETA LOCALE (.APP)
+----------------------------------------------------
+
+Se vuoi aprire PyDF Tool dal Finder con icona dedicata:
+
+  cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+  scripts/build_macos_launcher.sh
+
+Il bundle viene creato qui:
+
+  dist/PyDF Tool.app
+
+Puoi aprirlo con doppio click dal Finder. Il launcher:
+  - apre Terminal
+  - attiva la .venv della repo corrente
+  - lancia pydf-tool
+
+Nota importante:
+  non è un'app standalone. Se sposti la cartella del progetto
+  o ricrei la .venv, conviene rigenerare il launcher.
+
+
+----------------------------------------------------
   NAVIGAZIONE NELL'INTERFACCIA (TUI)
 ----------------------------------------------------
 
@@ -208,6 +231,10 @@ Poi verifica che funzioni:
 
   pydf-tool --help
 
+Se vuoi ricreare anche il launcher Finder:
+
+  scripts/build_macos_launcher.sh
+
 Verifica completa della suite test:
 
   PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
@@ -228,6 +255,12 @@ Verifica completa della suite test:
     riallineato dopo un reinstall. Esegui:
     source .venv/bin/activate
     bash setup.sh
+
+"Il launcher .app apre un terminale ma non trova la .venv"
+  → Ricrea l'ambiente e poi rigenera il bundle:
+    cd "/Users/flosh/Desktop/Coding/personale/PyDF Tool"
+    bash setup.sh
+    scripts/build_macos_launcher.sh
 
 "Tesseract non trovato"
   → Installa con: brew install tesseract tesseract-lang
@@ -255,6 +288,15 @@ Il file compresso è più grande dell'originale
 
 - Questo tool è pensato per macOS. Non è testato su
   altri sistemi operativi.
+
+- Il launcher "PyDF Tool.app" è una beta locale:
+  usa questa repo e questa .venv, non contiene Python
+  o i tool Homebrew al suo interno.
+
+- L'icona canonica del launcher è il file:
+  assets/icon/pydf-tool-icon-1024.png
+  Se la cambi, rigenera il bundle con:
+  scripts/build_macos_launcher.sh
 
 - L'OCR funziona bene su documenti scansionati in modo
   leggibile. Su PDF con testo storto, sbiadito o molto
