@@ -45,15 +45,13 @@ cp "$ICON_ICNS" "$RESOURCES_DIR/AppIcon.icns"
 cat > "$LAUNCHER_BIN" <<'LAUNCHER_EOF'
 #!/bin/bash
 
-set -euo pipefail
-
 # Il launcher sta in: dist/PyDF Tool.app/Contents/MacOS/
 # Il repo root e' 4 livelli sopra.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # Scrivi il comando terminale in un temp script (PYDF_CMD non-quoted: $REPO_ROOT espande ora)
-TMPSCRIPT=$(mktemp /tmp/pydf-launch-XXXXXX.sh)
+TMPSCRIPT=$(mktemp /tmp/pydf-launch-XXXXXXXX) || TMPSCRIPT="/tmp/pydf-launch-fallback-$$.sh"
 cat > "$TMPSCRIPT" << PYDF_CMD
 #!/bin/bash
 cd "$REPO_ROOT"
