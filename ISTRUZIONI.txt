@@ -303,6 +303,14 @@ Se usi il launcher .app, rigeneralo dopo l'aggiornamento:
   → Ricreare l'ambiente dall'inizio:
       rm -rf .venv && bash setup.sh && source .venv/bin/activate
 
+L'app crasha dopo un riavvio del Mac con errore tipo:
+  "ImportError: cannot import name '...' from 'textual' (unknown location)"
+  → macOS nasconde i file della .venv dopo il riavvio (bug Python 3.12).
+    Fix: ricostruire la .venv da capo con:
+      cd "/percorso/del/progetto/PyDF Tool"
+      rm -rf .venv && bash setup.sh
+    Dopo il completamento l'app funziona di nuovo normalmente.
+
 "Il launcher .app apre un terminale ma non trova la .venv"
   → Ricrea l'ambiente e poi rigenera il bundle:
       rm -rf .venv && bash setup.sh
