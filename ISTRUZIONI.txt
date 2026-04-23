@@ -1,5 +1,5 @@
 ====================================================
-  PYDF TOOL — ISTRUZIONI D'USO  (beta locale)
+  PYDF TOOL — ISTRUZIONI D'USO  (v1.0.0)
 ====================================================
 
 Cosa fa questo tool:
@@ -14,7 +14,7 @@ Cosa fa questo tool:
   PRIMA INSTALLAZIONE
 ====================================================
 
-Segui questi passi nell'ordine. Servono circa 10-15 minuti.
+Segui questi passi nell'ordine. Servono circa 5 minuti.
 
 
 ----------------------------------------------------
@@ -33,23 +33,7 @@ Segui le istruzioni a schermo. Alla fine rilancia Terminal.
 
 
 ----------------------------------------------------
-  PASSO 2 — Python 3.12 (da python.org)
-----------------------------------------------------
-
-Scarica l'installer da:
-
-  https://www.python.org/downloads/macos/
-
-Installa la versione 3.12.x più recente (pkg per macOS).
-Dopo l'installazione verifica:
-
-  python3 --version
-
-Deve rispondere "Python 3.12.x".
-
-
-----------------------------------------------------
-  PASSO 3 — Dipendenze OCR e PDF
+  PASSO 2 — Dipendenze OCR e PDF
 ----------------------------------------------------
 
 Nel Terminale:
@@ -60,64 +44,36 @@ Questa operazione può richiedere qualche minuto.
 
 
 ----------------------------------------------------
-  PASSO 4 — Scarica il progetto
+  PASSO 3 — Scarica e installa PyDF Tool
 ----------------------------------------------------
 
-Scegli una cartella dove mettere il progetto (es. Desktop)
-e clona il repository:
+1. Vai su:
+     https://github.com/FloshDev/pydf_tool/releases
 
-  cd ~/Desktop
-  git clone https://github.com/FloshDev/pydf_tool.git "PyDF Tool"
-  cd "PyDF Tool"
+2. Scarica il file "PyDF-Tool-v1.0.0.dmg"
 
-Oppure scarica lo zip dalla pagina GitHub e decomprimi.
+3. Apri il file .dmg scaricato (doppio click)
 
-
-----------------------------------------------------
-  PASSO 5 — Configura l'ambiente
-----------------------------------------------------
-
-Dalla cartella del progetto:
-
-  bash setup.sh
-
-Il setup installa le dipendenze Python e configura il tool.
-Al termine vedrai "Setup completato."
-
-Attiva l'ambiente virtuale:
-
-  source .venv/bin/activate
+4. Si apre una finestra con "PyDF Tool.app"
+   Puoi usarla direttamente da lì, oppure trascinarla
+   in Applicazioni per averla sempre a portata di mano.
 
 
 ----------------------------------------------------
-  PASSO 6 — Verifica
+  PASSO 4 — Primo avvio
 ----------------------------------------------------
 
-  pydf-tool --help
+Al primo avvio macOS potrebbe mostrare:
+  "PyDF Tool non può essere aperta perché proviene
+   da uno sviluppatore non identificato"
 
-Deve rispondere con la lista dei comandi disponibili.
+Soluzione:
+  1. Ctrl+click (tasto destro) su PyDF Tool.app
+  2. Scegli "Apri" dal menu
+  3. Clicca "Apri" nella finestra di conferma
 
-
-----------------------------------------------------
-  PASSO 7 — Launcher dal Finder (opzionale)
-----------------------------------------------------
-
-Se vuoi aprire il tool con doppio click dal Finder
-invece che dal terminale:
-
-  scripts/build_macos_launcher.sh
-
-Il bundle viene creato in:
-
-  dist/PyDF Tool.app
-
-Aprilo con doppio click. Il launcher:
-  - apre Terminal
-  - attiva la .venv della repo corrente
-  - lancia pydf-tool
-
-Nota: non è un'app standalone. Se sposti la cartella
-del progetto o ricrei la .venv, rigenera il launcher.
+Questa procedura è richiesta una sola volta.
+Dai prossimi avvii puoi aprire l'app normalmente.
 
 
 ====================================================
@@ -125,33 +81,21 @@ del progetto o ricrei la .venv, rigenera il launcher.
 ====================================================
 
 ----------------------------------------------------
-  Con il launcher .app
+  Con l'app
 ----------------------------------------------------
 
-Doppio click su "dist/PyDF Tool.app" dal Finder.
+Doppio click su "PyDF Tool.app" dal Finder.
 Si apre Terminal con la TUI già avviata.
 
 
 ----------------------------------------------------
-  Dal terminale
+  Dal terminale (avanzato)
 ----------------------------------------------------
 
-1. Apri Terminal
-2. Spostati nella cartella del progetto:
+Se hai usato pydf-tool nell'app, puoi anche richiamarlo
+direttamente da un terminale che hai aperto tramite l'app:
 
-     cd ~/Desktop/"PyDF Tool"
-     (sostituisci con il percorso dove hai messo il progetto)
-
-3. Attiva l'ambiente virtuale:
-
-     source .venv/bin/activate
-
-4. Lancia il tool:
-
-     pydf-tool
-
-Vedrai apparire l'interfaccia interattiva (TUI).
-Da lì puoi fare tutto con le frecce e Invio.
+  pydf-tool
 
 
 ====================================================
@@ -279,42 +223,20 @@ Nel flusso OCR ricorda che entri prima in un sottomenu:
   AGGIORNAMENTO
 ====================================================
 
-Per aggiornare all'ultima versione:
+Per aggiornare alla versione più recente:
 
-  cd ~/Desktop/"PyDF Tool"
-  git pull
-  rm -rf .venv && bash setup.sh
-  source .venv/bin/activate
-
-Se usi il launcher .app, rigeneralo dopo l'aggiornamento:
-
-  scripts/build_macos_launcher.sh
+  1. Vai su https://github.com/FloshDev/pydf_tool/releases
+  2. Scarica il nuovo .dmg
+  3. Sostituisci la vecchia PyDF Tool.app con la nuova
 
 
 ====================================================
   PROBLEMI COMUNI
 ====================================================
 
-"pydf-tool: command not found"
-  → L'ambiente virtuale non è attivo. Esegui:
-      source .venv/bin/activate
-
-"No module named 'pydf_tool'" o errore all'avvio
-  → Ricreare l'ambiente dall'inizio:
-      rm -rf .venv && bash setup.sh && source .venv/bin/activate
-
-L'app crasha dopo un riavvio del Mac con errore tipo:
-  "ImportError: cannot import name '...' from 'textual' (unknown location)"
-  → macOS nasconde i file della .venv dopo il riavvio (bug Python 3.12).
-    Fix: ricostruire la .venv da capo con:
-      cd "/percorso/del/progetto/PyDF Tool"
-      rm -rf .venv && bash setup.sh
-    Dopo il completamento l'app funziona di nuovo normalmente.
-
-"Il launcher .app apre un terminale ma non trova la .venv"
-  → Ricrea l'ambiente e poi rigenera il bundle:
-      rm -rf .venv && bash setup.sh
-      scripts/build_macos_launcher.sh
+macOS mostra "app da sviluppatore non identificato"
+  → Ctrl+click sull'app → "Apri" nel menu contestuale.
+    Al prossimo avvio la richiesta non apparirà più.
 
 "Tesseract non trovato"
   → Installa con: brew install tesseract tesseract-lang
@@ -323,7 +245,7 @@ L'app crasha dopo un riavvio del Mac con errore tipo:
   → Installa con: brew install ghostscript
 
 "La TUI segnala prerequisiti mancanti"
-  → Installa o reinstalla le dipendenze Homebrew (vedi Passo 3).
+  → Installa o reinstalla le dipendenze Homebrew (vedi Passo 2).
 
 L'OCR sembra bloccato senza fare niente
   → Non è bloccato. L'OCR è lento per natura, specialmente
@@ -334,25 +256,13 @@ Il file compresso è più grande dell'originale
   → È normale su PDF già ottimizzati. Prova un livello
     più alto (es. high o un numero vicino a 100).
 
-macOS mostra "app da sviluppatore non identificato"
-  → Ctrl+click sull'app, poi "Apri" nel menu contestuale.
-    Al prossimo avvio la richiesta non apparirà più.
-
 
 ====================================================
   NOTE
 ====================================================
 
-- Per usare pydf-tool dal terminale la venv deve essere attiva.
-  Devi eseguire "source .venv/bin/activate" ogni volta che
-  apri un nuovo terminale (a meno che non usi il launcher .app).
-
 - Questo tool è pensato per macOS. Non è testato su
   altri sistemi operativi.
-
-- Il launcher "PyDF Tool.app" è una beta locale:
-  usa questa repo e questa .venv, non contiene Python
-  o i tool Homebrew al suo interno.
 
 - L'OCR funziona bene su documenti scansionati in modo
   leggibile. Su PDF con testo storto, sbiadito o molto

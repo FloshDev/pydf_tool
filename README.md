@@ -1,18 +1,10 @@
 # PyDF Tool
 
-`PyDF Tool` è una beta locale per macOS che aiuta a verificare se un PDF contiene già testo, eseguire OCR su scansioni e comprimere PDF pesanti. Si usa da terminale, ma la TUI è stata resa più guidata: selezione file da Finder, controlli iniziali dei prerequisiti, output suggerito nella stessa cartella e azioni rapide a fine operazione.
-
-## Stato del progetto
-
-Il progetto è usabile nella sua forma attuale come beta locale su macOS. Le tre funzioni principali sono presenti, la TUI supporta flussi più semplici rispetto alla CLI pura e la repo include ora anche un launcher `.app` locale con icona dedicata per aprire il tool dal Finder. Restano possibili evoluzioni dell'interfaccia e del packaging, ma il comportamento documentato qui riflette lo stato attuale del codice.
+`PyDF Tool` è un'app macOS per verificare se un PDF contiene già testo, eseguire OCR su scansioni e comprimere PDF pesanti. Si usa aprendo l'app dal Finder o dal terminale. La TUI guida l'utente con selezione file da Finder, controlli iniziali dei prerequisiti, output suggerito nella stessa cartella e azioni rapide a fine operazione.
 
 ## Prerequisiti
 
-- macOS (testato con Python.org Python `3.12`)
-- [Homebrew](https://brew.sh) — gestore pacchetti macOS
-- [Python 3.12](https://www.python.org/downloads/macos/) da python.org
-
-Dipendenze di sistema via Homebrew:
+[Homebrew](https://brew.sh) e i tool OCR/PDF:
 
 ```bash
 brew install tesseract tesseract-lang poppler ghostscript
@@ -22,58 +14,32 @@ brew install tesseract tesseract-lang poppler ghostscript
 
 ## Installazione
 
-```bash
-git clone https://github.com/FloshDev/pydf_tool.git "PyDF Tool"
-cd "PyDF Tool"
-brew install tesseract tesseract-lang poppler ghostscript
-bash setup.sh
-source .venv/bin/activate
-```
+1. Installa i prerequisiti (vedi sopra)
+2. Scarica `PyDF-Tool-v1.0.0.dmg` dalla [pagina Releases](https://github.com/FloshDev/pydf_tool/releases)
+3. Monta il DMG e apri `PyDF Tool.app`
+4. Al primo avvio macOS mostra un avviso di sicurezza: right-click sull'app → **Apri** — richiesto una sola volta
 
-Verifica rapida:
-
-```bash
-pydf-tool --help
-```
-
-Se reinstalli le dipendenze con `pip install -e .`, riesegui anche `bash setup.sh` per riallineare il wrapper e il workaround macOS.
-
-## Launcher macOS
-
-Per costruire il launcher `.app` locale con icona:
-
-```bash
-scripts/build_macos_launcher.sh
-```
-
-Output generati:
-
-- `assets/icon/pydf-tool-icon-1024.png` — master PNG definitivo dell'icona
-- `assets/icon/pydf-tool.icns` — icona macOS generata dal PNG
-- `dist/PyDF Tool.app` — launcher locale apribile dal Finder
-
-Il launcher apre Terminal e lancia `pydf-tool` dentro questa repo con la `.venv` corrente. Non è ancora un'app standalone: se sposti la cartella del progetto o ricrei la `.venv`, conviene rigenerarlo con `scripts/build_macos_launcher.sh`. Se in futuro cambi l'icona, sostituisci prima `assets/icon/pydf-tool-icon-1024.png`.
+Non serve Python.org, git clone o configurazione aggiuntiva.
 
 ## Uso
 
 ### TUI interattiva
 
-Avvia `pydf-tool` senza argomenti per aprire la TUI:
+Apri `PyDF Tool.app` dal Finder, oppure da terminale:
 
 ```bash
 pydf-tool
 ```
 
-Nella TUI attuale:
+Nella TUI:
 
 - `OCR` apre un sottomenu con `Verifica OCR` ed `Esegui OCR`
 - nei passi file e nella verifica OCR puoi aprire Finder con `F2` o con il pulsante dedicato
-- nei passi output puoi usare `F2` per scegliere la cartella di destinazione e il file finale viene proposto automaticamente
+- nei passi output puoi usare `F2` per scegliere la cartella di destinazione
 - all'avvio l'app controlla i prerequisiti e segnala subito eventuali mancanze
-- nei wizard OCR e compressione l'output di default resta nella stessa cartella del file di partenza
+- l'output di default resta nella stessa cartella del file di partenza
 - l'app ricorda ultima cartella usata, lingua OCR preferita e livello di compressione preferito
 - a fine OCR o compressione puoi aprire subito il file o la cartella di output
-- i messaggi di esito indicano dove ha salvato il file e, per la compressione, quanto ha ridotto
 
 Controlli principali:
 
@@ -85,8 +51,6 @@ Controlli principali:
 - `Ctrl+C` interrompe un'operazione in corso
 
 ### CLI diretta
-
-Se vuoi saltare la TUI:
 
 ```bash
 pydf-tool check documento.pdf
@@ -117,17 +81,14 @@ Se `--output` non viene specificato, il file viene creato nella stessa cartella 
 
 ## Troubleshooting
 
-**`pydf-tool: command not found`**  
-Attiva la virtual environment con `source .venv/bin/activate` e riprova.
+**macOS mostra "app da sviluppatore non identificato"**  
+Right-click sull'app → **Apri**. Richiesto una sola volta.
 
 **`tesseract`, `pdftocairo`/`pdftoppm` o `gs` non vengono trovati**  
 Installa o reinstalla le dipendenze di sistema con Homebrew.
 
 **La TUI segnala prerequisiti mancanti**  
-L'app ora fa un controllo iniziale e può bloccare OCR o compressione se manca un tool esterno.
-
-**Il launcher `.app` non parte o apre un terminale con errore sulla `.venv`**  
-Ricrea l'ambiente con `bash setup.sh` e rigenera il bundle con `scripts/build_macos_launcher.sh`.
+L'app fa un controllo iniziale e può bloccare OCR o compressione se manca un tool esterno.
 
 **Il PDF non viene riconosciuto dall'OCR**  
 Verifica prima con `pydf-tool check documento.pdf`. Se il file è protetto o molto irregolare, l'OCR può fallire.
@@ -137,10 +98,10 @@ Se il PDF è già molto compresso o contiene solo testo vettoriale, il margine d
 
 ## Sviluppo
 
-Test locali con la venv attiva:
+Il codice sorgente è disponibile su [GitHub](https://github.com/FloshDev/pydf_tool).
+
+Test locali (richiede setup venv di sviluppo con `bash setup.sh`):
 
 ```bash
-source .venv/bin/activate
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
-
