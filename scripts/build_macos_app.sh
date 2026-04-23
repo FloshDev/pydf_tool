@@ -114,3 +114,78 @@ echo "--- Copia sorgenti ---"
 cp -r "$ROOT_DIR/src/pydf_tool" "$CONTENTS/Resources/src/"
 echo "  src/pydf_tool copiato"
 echo ""
+# ── Launcher ─────────────────────────────────────────────────────────────────
+echo "--- Genera launcher ---"
+LAUNCHER="$CONTENTS/MacOS/pydf-tool-launcher"
+
+cat > "$LAUNCHER" << 'LAUNCHER_OUTER'
+#!/bin/bash
+BUNDLE="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_EMBEDDED="$BUNDLE/Frameworks/python/bin/python3"
+PYPATH="$BUNDLE/Resources/src:$BUNDLE/Resources/pydf-packages"
+
+TMPSCRIPT=$(mktemp /tmp/pydf-launch-XXXXXXXX) || TMPSCRIPT="/tmp/pydf-launch-fallback-$$.sh"
+cat > "$TMPSCRIPT" << PYDF_CMD
+#!/bin/bash
+export PYTHONPATH="$PYPATH"
+printf '\033]0;PyDF Tool\007'
+clear
+"$PYTHON_EMBEDDED" -m pydf_tool
+exit_code=\$?
+printf '\nPyDF Tool terminato con stato %s.\n' "\$exit_code"
+printf 'La sessione resta aperta in questa finestra.\n'
+exec \$SHELL -l
+PYDF_CMD
+chmod +x "$TMPSCRIPT"
+
+osascript - "$TMPSCRIPT" <<'OSA'
+on run argv
+    set scriptPath to item 1 of argv
+    tell application "Terminal"
+        activate
+        do script scriptPath
+    end tell
+end run
+OSA
+LAUNCHER_OUTER
+
+chmod +x "$LAUNCHER"
+echo "  Launcher scritto"
+echo ""
+
+# ── Info.plist ───────────────────────────────────────────────────────────────
+echo "--- Genera Info.plist ---"
+cat > "$CONTENTS/Info.plist" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>it</string>
+    <key>CFBundleDisplayName</key>
+    <string>PyDF Tool</string>
+    <key>CFBundleExecutable</key>
+    <string>pydf-tool-launcher</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.flosh.pydf-tool</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>PyDF Tool</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$APP_VERSION</string>
+    <key>CFBundleVersion</key>
+    <string>$APP_VERSION</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+EOF
+echo "  Info.plist scritto (versione $APP_VERSION)"
+echo ""
