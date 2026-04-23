@@ -189,3 +189,41 @@ cat > "$CONTENTS/Info.plist" << EOF
 EOF
 echo "  Info.plist scritto (versione $APP_VERSION)"
 echo ""
+
+# ── Icona ────────────────────────────────────────────────────────────────────
+echo "--- Genera AppIcon.icns ---"
+ICONSET_DIR="$CACHE_DIR/AppIcon.iconset"
+rm -rf "$ICONSET_DIR"
+mkdir -p "$ICONSET_DIR"
+
+for size in 16 32 64 128 256 512; do
+    sips -z $size $size "$ICON_PNG" --out "$ICONSET_DIR/icon_${size}x${size}.png" > /dev/null
+    double=$((size * 2))
+    sips -z $double $double "$ICON_PNG" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" > /dev/null
+done
+
+iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS"
+echo "  AppIcon.icns generato"
+echo ""
+
+# ── DMG ──────────────────────────────────────────────────────────────────────
+echo "--- Crea DMG ---"
+DMG_NAME="PyDF-Tool-v${APP_VERSION}.dmg"
+DMG_PATH="$DIST_DIR/$DMG_NAME"
+rm -f "$DMG_PATH"
+hdiutil create \
+    -volname "PyDF Tool" \
+    -srcfolder "$APP_BUNDLE" \
+    -ov \
+    -format UDZO \
+    "$DMG_PATH"
+echo "  DMG creato: $DMG_PATH"
+echo ""
+
+# ── Fine ─────────────────────────────────────────────────────────────────────
+echo "=== Build completato ==="
+echo "  Bundle: $APP_BUNDLE"
+echo "  DMG:    $DMG_PATH"
+echo ""
+echo "Test bundle:"
+echo "  bash scripts/smoke_test_bundle.sh \"$APP_BUNDLE\""
