@@ -9,6 +9,8 @@ jobs:
   build-macos:
     name: Build macOS app bundle
     runs-on: macos-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
