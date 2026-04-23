@@ -69,3 +69,48 @@ if [ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]; then
 fi
 echo "  SHA256 OK"
 echo ""
+
+# ── Struttura bundle ─────────────────────────────────────────────────────────
+echo "--- Crea struttura bundle ---"
+rm -rf "$APP_BUNDLE"
+mkdir -p \
+    "$CONTENTS/MacOS" \
+    "$CONTENTS/Frameworks" \
+    "$CONTENTS/Resources/pydf-packages" \
+    "$CONTENTS/Resources/src"
+echo "  OK"
+echo ""
+
+# ── Installa Python embedded ─────────────────────────────────────────────────
+echo "--- Installa Python embedded ---"
+tar xzf "$PBS_TARBALL" -C "$CONTENTS/Frameworks/"
+EMBEDDED_PYTHON="$CONTENTS/Frameworks/python/bin/python3"
+if [ ! -x "$EMBEDDED_PYTHON" ]; then
+    echo "Errore: $EMBEDDED_PYTHON non trovato dopo estrazione."
+    echo "Struttura estratta:"
+    ls "$CONTENTS/Frameworks/"
+    exit 1
+fi
+PYTHON_VERSION_OUTPUT=$("$EMBEDDED_PYTHON" --version)
+echo "  $PYTHON_VERSION_OUTPUT"
+echo ""
+
+# ── Installa dipendenze Python ───────────────────────────────────────────────
+echo "--- Installa dipendenze Python ---"
+PACKAGES_DIR="$CONTENTS/Resources/pydf-packages"
+"$EMBEDDED_PYTHON" -m pip install \
+    --target "$PACKAGES_DIR" \
+    --quiet \
+    "pdf2image==1.17.0" \
+    "textual>=0.70.0" \
+    "pypdf==6.8.0" \
+    "pytesseract==0.3.13" \
+    "Pillow>=10.3.0,<12.0"
+echo "  Dipendenze installate in $PACKAGES_DIR"
+echo ""
+
+# ── Copia sorgenti ───────────────────────────────────────────────────────────
+echo "--- Copia sorgenti ---"
+cp -r "$ROOT_DIR/src/pydf_tool" "$CONTENTS/Resources/src/"
+echo "  src/pydf_tool copiato"
+echo ""
