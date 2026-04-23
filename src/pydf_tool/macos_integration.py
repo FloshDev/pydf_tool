@@ -140,11 +140,11 @@ def _coerce_default_directory(initial_directory: str | Path | None) -> Path | No
         return None
 
     candidate = resolve_user_path(initial_directory)
-    if candidate.exists():
-        return candidate if candidate.is_dir() else candidate.parent
-    if candidate.suffix:
+    if candidate.is_dir():
+        return candidate
+    if candidate.parent.is_dir():
         return candidate.parent
-    return candidate
+    return None
 
 
 def _build_choose_pdf_script() -> str:
