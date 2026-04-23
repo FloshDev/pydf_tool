@@ -211,7 +211,7 @@ echo "--- Crea DMG ---"
 DMG_NAME="PyDF-Tool-v${APP_VERSION}.dmg"
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 DMG_STAGING="$CACHE_DIR/dmg-staging"
-rm -f "$DMG_PATH"
+rm -f "$DIST_DIR"/PyDF-Tool-v*.dmg
 rm -rf "$DMG_STAGING"
 mkdir -p "$DMG_STAGING"
 cp -r "$APP_BUNDLE" "$DMG_STAGING/"
