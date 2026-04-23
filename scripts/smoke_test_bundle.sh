@@ -10,6 +10,11 @@ PYTHON="$CONTENTS/Frameworks/python/bin/python3"
 PACKAGES="$CONTENTS/Resources/pydf-packages"
 SRC="$CONTENTS/Resources/src"
 
+if [ ! -d "$BUNDLE" ]; then
+    echo "ERRORE: bundle non trovato: $BUNDLE" >&2
+    exit 1
+fi
+
 PASS=0
 FAIL=0
 
@@ -29,21 +34,74 @@ echo "=== Smoke test: $BUNDLE ==="
 echo ""
 echo "--- Struttura bundle ---"
 
-[ -d "$CONTENTS/MacOS" ]          && check "MacOS/ esiste"          "ok" || check "MacOS/ esiste"          "mancante"
-[ -f "$CONTENTS/MacOS/pydf-tool-launcher" ] && check "launcher esiste" "ok" || check "launcher esiste" "mancante"
-[ -x "$CONTENTS/MacOS/pydf-tool-launcher" ] && check "launcher eseguibile" "ok" || check "launcher eseguibile" "non eseguibile"
-[ -d "$CONTENTS/Frameworks/python" ] && check "Frameworks/python/ esiste" "ok" || check "Frameworks/python/ esiste" "mancante"
-[ -f "$PYTHON" ]                   && check "python3 esiste"         "ok" || check "python3 esiste"         "mancante"
-[ -x "$PYTHON" ]                   && check "python3 eseguibile"     "ok" || check "python3 eseguibile"     "non eseguibile"
-[ -d "$PACKAGES" ]                 && check "pydf-packages/ esiste"  "ok" || check "pydf-packages/ esiste"  "mancante"
-[ -d "$SRC/pydf_tool" ]            && check "src/pydf_tool/ esiste"  "ok" || check "src/pydf_tool/ esiste"  "mancante"
-[ -f "$CONTENTS/Info.plist" ]      && check "Info.plist esiste"      "ok" || check "Info.plist esiste"      "mancante"
-[ -f "$CONTENTS/Resources/AppIcon.icns" ] && check "AppIcon.icns esiste" "ok" || check "AppIcon.icns esiste" "mancante"
+if [ -d "$CONTENTS/MacOS" ]; then
+    check "MacOS/ esiste" "ok"
+else
+    check "MacOS/ esiste" "mancante"
+fi
+
+if [ -f "$CONTENTS/MacOS/pydf-tool-launcher" ]; then
+    check "launcher esiste" "ok"
+else
+    check "launcher esiste" "mancante"
+fi
+
+if [ -x "$CONTENTS/MacOS/pydf-tool-launcher" ]; then
+    check "launcher eseguibile" "ok"
+else
+    check "launcher eseguibile" "non eseguibile"
+fi
+
+if [ -d "$CONTENTS/Frameworks/python" ]; then
+    check "Frameworks/python/ esiste" "ok"
+else
+    check "Frameworks/python/ esiste" "mancante"
+fi
+
+if [ -f "$PYTHON" ]; then
+    check "python3 esiste" "ok"
+else
+    check "python3 esiste" "mancante"
+fi
+
+if [ -x "$PYTHON" ]; then
+    check "python3 eseguibile" "ok"
+else
+    check "python3 eseguibile" "non eseguibile"
+fi
+
+if [ -d "$PACKAGES" ]; then
+    check "pydf-packages/ esiste" "ok"
+else
+    check "pydf-packages/ esiste" "mancante"
+fi
+
+if [ -d "$SRC/pydf_tool" ]; then
+    check "src/pydf_tool/ esiste" "ok"
+else
+    check "src/pydf_tool/ esiste" "mancante"
+fi
+
+if [ -f "$CONTENTS/Info.plist" ]; then
+    check "Info.plist esiste" "ok"
+else
+    check "Info.plist esiste" "mancante"
+fi
+
+if [ -f "$CONTENTS/Resources/AppIcon.icns" ]; then
+    check "AppIcon.icns esiste" "ok"
+else
+    check "AppIcon.icns esiste" "mancante"
+fi
 
 echo ""
 echo "--- Python embedded ---"
 
-PY_VER=$("$PYTHON" --version 2>&1) && check "python3 --version: $PY_VER" "ok" || check "python3 --version" "fallito"
+if PY_VER=$("$PYTHON" --version 2>&1); then
+    check "python3 --version: $PY_VER" "ok"
+else
+    check "python3 --version" "fallito"
+fi
 
 echo ""
 echo "--- Import dipendenze ---"
@@ -51,9 +109,11 @@ echo "--- Import dipendenze ---"
 PYPATH="$SRC:$PACKAGES"
 import_check() {
     local mod="$1"
-    PYTHONPATH="$PYPATH" "$PYTHON" -c "import $mod" 2>/dev/null \
-        && check "import $mod" "ok" \
-        || check "import $mod" "fallito"
+    if PYTHONPATH="$PYPATH" "$PYTHON" -c "import $mod" 2>/dev/null; then
+        check "import $mod" "ok"
+    else
+        check "import $mod" "fallito"
+    fi
 }
 
 import_check textual
@@ -61,14 +121,17 @@ import_check pdf2image
 import_check pytesseract
 import_check PIL
 import_check pypdf
+import_check rich
 import_check pydf_tool
 
 echo ""
 echo "--- Entry point ---"
 
-PYTHONPATH="$PYPATH" "$PYTHON" -m pydf_tool --help > /dev/null 2>&1 \
-    && check "python -m pydf_tool --help" "ok" \
-    || check "python -m pydf_tool --help" "fallito"
+if PYTHONPATH="$PYPATH" "$PYTHON" -m pydf_tool --help > /dev/null 2>&1; then
+    check "python -m pydf_tool --help" "ok"
+else
+    check "python -m pydf_tool --help" "fallito"
+fi
 
 echo ""
 echo "=== Risultato: $PASS passati, $FAIL falliti ==="
