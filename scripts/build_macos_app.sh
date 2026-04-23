@@ -223,13 +223,12 @@ hdiutil create \
     -format UDZO \
     "$DMG_PATH"
 rm -rf "$DMG_STAGING"
+rm -rf "$APP_BUNDLE"
 echo "  DMG creato: $DMG_PATH"
 echo ""
 
 # ── Fine ─────────────────────────────────────────────────────────────────────
 echo "=== Build completato ==="
-echo "  Bundle: $APP_BUNDLE"
 echo "  DMG:    $DMG_PATH"
 echo ""
-echo "Test bundle:"
-echo "  bash scripts/smoke_test_bundle.sh \"$APP_BUNDLE\""
+echo "Installa: monta il DMG e trascina PyDF Tool in Applicazioni."
