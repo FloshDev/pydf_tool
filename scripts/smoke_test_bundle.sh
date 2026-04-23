@@ -135,4 +135,8 @@ fi
 
 echo ""
 echo "=== Risultato: $PASS passati, $FAIL falliti ==="
-[ "$FAIL" -eq 0 ] && exit 0 || exit 1
+if [ "$FAIL" -eq 0 ]; then
+    exit 0
+else
+    exit 1
+fi
