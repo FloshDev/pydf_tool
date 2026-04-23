@@ -49,3 +49,4 @@ PDF Sample/
 # Editors
 .vscode/
 .idea/
+.build-cache/
