@@ -99,9 +99,3 @@ Se il PDF è già molto compresso o contiene solo testo vettoriale, il margine d
 ## Sviluppo
 
 Il codice sorgente è disponibile su [GitHub](https://github.com/FloshDev/pydf_tool).
-
-Test locali (richiede setup venv di sviluppo con `bash setup.sh`):
-
-```bash
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-```
