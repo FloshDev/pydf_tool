@@ -664,6 +664,15 @@ class CompressionHelpersTestCase(unittest.TestCase):
         high_strength = resolve_compression_profile("90")
         self.assertLess(high_strength.dpi, low_strength.dpi)
 
+    def test_no_preset_uses_printer_setting(self) -> None:
+        for preset in ("low", "medium", "high"):
+            profile = resolve_compression_profile(preset)
+            self.assertNotEqual(profile.pdf_setting, "/printer", f"preset '{preset}' must not use /printer (inflates files)")
+
+    def test_low_preset_uses_ebook_setting(self) -> None:
+        profile = resolve_compression_profile("low")
+        self.assertEqual(profile.pdf_setting, "/ebook")
+
     def test_resolve_compress_output_adds_pdf_suffix(self) -> None:
         result = resolve_compress_output_path(Path("file.pdf"), "out")
         self.assertEqual(result, Path("out.pdf"))
