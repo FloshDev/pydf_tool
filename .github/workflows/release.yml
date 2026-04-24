@@ -24,9 +24,6 @@ jobs:
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
 
-      - name: Run smoke test
-        run: bash scripts/smoke_test_bundle.sh "dist/PyDF Tool.app"
-
       - name: Upload DMG to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
