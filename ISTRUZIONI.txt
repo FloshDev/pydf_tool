@@ -1,5 +1,5 @@
 ====================================================
-  PYDF TOOL — ISTRUZIONI D'USO  (v1.0.0)
+  PYDF TOOL — ISTRUZIONI D'USO  (v1.0.1)
 ====================================================
 
 Cosa fa questo tool:
@@ -50,13 +50,14 @@ Questa operazione può richiedere qualche minuto.
 1. Vai su:
      https://github.com/FloshDev/pydf_tool/releases
 
-2. Scarica il file "PyDF-Tool-v1.0.0.dmg"
+2. Scarica il file "PyDF-Tool-v1.0.1.dmg"
 
 3. Apri il file .dmg scaricato (doppio click)
 
-4. Si apre una finestra con "PyDF Tool.app"
-   Puoi usarla direttamente da lì, oppure trascinarla
-   in Applicazioni per averla sempre a portata di mano.
+4. Si apre una finestra con "PyDF Tool.app" e una
+   freccia che punta alla cartella Applicazioni.
+   Trascina "PyDF Tool.app" sulla cartella Applicazioni
+   per installare l'app. Al termine espelli il DMG.
 
 
 ----------------------------------------------------
