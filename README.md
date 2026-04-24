@@ -4,40 +4,40 @@
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)](https://github.com/FloshDev/pydf_tool)
 [![License](https://img.shields.io/github/license/FloshDev/pydf_tool)](https://github.com/FloshDev/pydf_tool/blob/main/LICENSE)
 
-> A standalone macOS app for checking, OCR-ing, and compressing PDF files — no Python installation required.
+> Applicazione macOS autonoma per controllare, eseguire OCR e comprimere file PDF — senza bisogno di installare Python.
 
-PyDF Tool handles three common PDF tasks: detecting whether a scanned PDF already contains searchable text, running OCR on scans to produce a searchable PDF or plain text, and compressing heavy PDFs with preset or custom quality levels. It ships as a self-contained `.app` bundle (Python embedded) and can be driven either through an interactive terminal UI or directly from the command line.
+PyDF Tool gestisce tre operazioni comuni sui PDF: rilevare se un PDF scansionato contiene già testo ricercabile, eseguire l'OCR su scansioni per produrre un PDF ricercabile o testo semplice, e comprimere PDF pesanti con livelli di qualità preimpostati o personalizzati. Viene distribuito come bundle `.app` autonomo (Python incluso) e può essere usato sia tramite un'interfaccia TUI interattiva che direttamente da riga di comando.
 
-## Installation
+## Installazione
 
-### Prerequisites
+### Prerequisiti
 
-[Homebrew](https://brew.sh) must be installed, then:
+[Homebrew](https://brew.sh) deve essere installato, poi:
 
 ```bash
 brew install tesseract tesseract-lang poppler ghostscript
 ```
 
-| Tool | Purpose |
+| Strumento | Funzione |
 |---|---|
-| `tesseract` | OCR engine used to extract text from scanned pages |
-| `tesseract-lang` | Language data packs for Tesseract (includes Italian, English, and more) |
-| `poppler` | PDF-to-image renderer (`pdftocairo`/`pdftoppm`) used before OCR |
-| `ghostscript` | PDF compression backend (`gs`) |
+| `tesseract` | Motore OCR per estrarre testo dalle pagine scansionate |
+| `tesseract-lang` | Pacchetti dati linguistici per Tesseract (include italiano, inglese e altre lingue) |
+| `poppler` | Convertitore PDF-in-immagine (`pdftocairo`/`pdftoppm`) usato prima dell'OCR |
+| `ghostscript` | Backend per la compressione PDF (`gs`) |
 
-No Python.org, `pip`, or virtual environment setup needed — the app bundles its own interpreter.
+Non serve Python.org, `pip` o ambienti virtuali — l'app include il proprio interprete.
 
 ### Download
 
-1. Download `PyDF-Tool-v1.0.1.dmg` from [Releases](https://github.com/FloshDev/pydf_tool/releases)
-2. Open the DMG, drag **PyDF Tool** into the **Applications** folder using the included shortcut
-3. First launch: macOS Gatekeeper will warn about an unidentified developer — right-click the app → **Open** (required once only)
+1. Scarica `PyDF-Tool-v1.0.1.dmg` dalla pagina [Releases](https://github.com/FloshDev/pydf_tool/releases)
+2. Apri il DMG e trascina **PyDF Tool** nella cartella **Applicazioni** usando il collegamento incluso
+3. Al primo avvio: macOS Gatekeeper avverte che lo sviluppatore non è identificato — fai clic destro sull'app → **Apri** (richiesto una sola volta)
 
-## Usage
+## Utilizzo
 
-### Interactive TUI
+### TUI interattiva
 
-Launch from the Finder by opening **PyDF Tool.app**, or from any terminal:
+Avvia dal Finder aprendo **PyDF Tool.app**, oppure da qualsiasi terminale:
 
 ```bash
 pydf-tool
@@ -45,80 +45,80 @@ pydf-tool
 
 <!-- screenshot -->
 
-The TUI checks prerequisites on startup and reports any missing tools immediately. The default output location is the same folder as the input file; the app remembers the last used folder, preferred OCR language, and preferred compression level across sessions.
+La TUI verifica i prerequisiti all'avvio e segnala immediatamente gli strumenti mancanti. La cartella di output predefinita è la stessa del file di input; l'app ricorda la cartella usata l'ultima volta, la lingua OCR preferita e il livello di compressione preferito tra le sessioni.
 
-Key controls:
+Controlli principali:
 
-| Key | Action |
+| Tasto | Azione |
 |---|---|
-| `↑` / `↓` | Navigate options |
-| `Enter` | Confirm |
-| `F2` | Open a Finder dialog (file or folder picker, when supported) |
-| `Esc` | Go back or dismiss a dialog |
-| `H` or `F1` | Open inline help (on screens that support it) |
-| `Ctrl+C` | Abort a running operation |
+| `↑` / `↓` | Naviga tra le opzioni |
+| `Invio` | Conferma |
+| `F2` | Apre una finestra Finder (selettore file o cartella, dove supportato) |
+| `Esc` | Torna indietro o chiude un dialogo |
+| `H` o `F1` | Apre la guida in linea (nelle schermate che la supportano) |
+| `Ctrl+C` | Interrompe un'operazione in corso |
 
-The **OCR** menu entry expands into two sub-actions: **Check OCR** (detect existing text) and **Run OCR** (perform OCR). After each operation you can open the output file or its containing folder directly from the result screen.
+La voce di menu **OCR** si espande in due sotto-azioni: **Controlla OCR** (rileva testo esistente) ed **Esegui OCR** (avvia l'OCR). Dopo ogni operazione puoi aprire il file di output o la cartella che lo contiene direttamente dalla schermata dei risultati.
 
 ### CLI
 
 ```bash
-# Check whether a PDF already contains searchable text
+# Controlla se un PDF contiene già testo ricercabile
 pydf-tool check document.pdf
 
-# OCR a scanned PDF — output as searchable PDF
+# OCR su un PDF scansionato — output come PDF ricercabile
 pydf-tool ocr scan.pdf --lang it --output output.pdf
 
-# OCR with multiple languages, output as plain text
+# OCR con più lingue, output come testo semplice
 pydf-tool ocr scan.pdf --lang it+en --output scan.txt
 
-# Compress with a named preset
+# Compressione con un livello preimpostato
 pydf-tool compress document.pdf --level medium --output output.pdf
 
-# Compress with a custom quality level (0–100)
+# Compressione con un livello di qualità personalizzato (0–100)
 pydf-tool compress document.pdf --level 65 --output document-small.pdf
 
-# Compress and convert to grayscale
+# Comprimi e converti in scala di grigi
 pydf-tool compress document.pdf --level medium --grayscale
 
-# Open the interactive TUI explicitly
+# Avvia la TUI interattiva in modo esplicito
 pydf-tool interactive
 
-# Show general help or help for a subcommand
+# Mostra la guida generale o la guida per un sottocomando
 pydf-tool help
 pydf-tool help ocr
 ```
 
-If `--output` is omitted, the output file is created in the same folder as the input with an auto-incremented name.
+Se `--output` viene omesso, il file di output viene creato nella stessa cartella del file di input con un nome incrementale automatico.
 
-## Features
+## Funzionalita
 
-| Command | Description |
+| Comando | Descrizione |
 |---|---|
-| `check` | Detect whether a PDF already contains searchable text or needs OCR |
-| `ocr` | Convert a scanned PDF to a searchable PDF or plain-text file |
-| `compress` | Reduce PDF file size using a named preset or a custom quality level |
-| `interactive` | Explicitly launch the interactive TUI |
-| `help` | Show general help or detailed help for a subcommand |
+| `check` | Rileva se un PDF contiene già testo ricercabile o necessita di OCR |
+| `ocr` | Converte un PDF scansionato in un PDF ricercabile o in un file di testo semplice |
+| `compress` | Riduce le dimensioni del PDF usando un livello preimpostato o un valore di qualita personalizzato |
+| `interactive` | Avvia esplicitamente la TUI interattiva |
+| `help` | Mostra la guida generale o la guida dettagliata per un sottocomando |
 
-## Troubleshooting
+## Risoluzione dei problemi
 
-**macOS shows "unidentified developer" warning**
-Right-click the app → **Open**. This is required only on the first launch.
+**macOS mostra l'avviso "sviluppatore non identificato"**
+Fai clic destro sull'app → **Apri**. E richiesto solo al primo avvio.
 
-**`tesseract`, `pdftocairo`/`pdftoppm`, or `gs` not found**
-Install or reinstall the system dependencies via Homebrew (see [Prerequisites](#prerequisites)).
+**`tesseract`, `pdftocairo`/`pdftoppm` o `gs` non trovati**
+Installa o reinstalla le dipendenze di sistema tramite Homebrew (vedi [Prerequisiti](#prerequisiti)).
 
-**The TUI reports missing prerequisites**
-The app runs a prerequisite check at startup and blocks OCR or compression if a required external tool is absent.
+**La TUI segnala prerequisiti mancanti**
+L'app esegue un controllo dei prerequisiti all'avvio e blocca OCR e compressione se uno strumento esterno richiesto e assente.
 
-**The PDF is not recognized by OCR**
-Run `pydf-tool check document.pdf` first. Password-protected or heavily corrupted files may cause OCR to fail.
+**Il PDF non viene riconosciuto dall'OCR**
+Esegui prima `pydf-tool check document.pdf`. File protetti da password o gravemente corrotti possono causare il fallimento dell'OCR.
 
-**Compression does not reduce the file size significantly**
-If the PDF is already highly compressed or contains only vector text, further size reduction is limited.
+**La compressione non riduce significativamente le dimensioni del file**
+Se il PDF e gia molto compresso o contiene solo testo vettoriale, la riduzione dimensionale e limitata.
 
-## Development
+## Sviluppo
 
 ```bash
 git clone https://github.com/FloshDev/pydf_tool
@@ -127,14 +127,14 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-To build the standalone `.app` bundle and DMG:
+Per costruire il bundle `.app` autonomo e il DMG:
 
 ```bash
 scripts/build_macos_app.sh
 ```
 
-The script produces a `.dmg` in `dist/` with an Applications symlink for drag-to-install. Any previous DMG for the same version is removed before building.
+Lo script produce un `.dmg` in `dist/` con un collegamento ad Applicazioni per l'installazione tramite trascinamento. Eventuali DMG precedenti della stessa versione vengono rimossi prima della build.
 
-## License
+## Licenza
 
-This project is licensed under the terms found in the [LICENSE](LICENSE) file.
+Questo progetto e distribuito secondo i termini riportati nel file [LICENSE](LICENSE).
