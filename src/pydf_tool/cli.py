@@ -78,6 +78,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     interactive_parser.set_defaults(handler=_handle_interactive)
 
+    update_parser = subparsers.add_parser(
+        "update",
+        help="Verifica se è disponibile una nuova versione.",
+    )
+    update_parser.set_defaults(handler=_handle_update)
+
     help_parser = subparsers.add_parser(
         "help",
         help="Mostra l'aiuto generale o di un sottocomando.",
@@ -85,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     help_parser.add_argument(
         "topic",
         nargs="?",
-        choices=("ocr", "compress", "check", "interactive"),
+        choices=("ocr", "compress", "check", "interactive", "update"),
         help="Comando di cui mostrare l'aiuto.",
     )
     help_parser.set_defaults(
@@ -147,6 +153,23 @@ def _handle_check(args: argparse.Namespace) -> int:
     print(f"Media caratteri/pagina: {result.chars_per_page_avg:.0f}")
     print()
     print(f"Verdetto: {verdetti[result.verdict]}")
+    return 0
+
+
+def _handle_update(_: argparse.Namespace) -> int:
+    from . import __version__
+    from .update_check import check_update_status
+
+    print("Verifica aggiornamenti in corso...")
+    tag, error = check_update_status()
+    if error:
+        print("Impossibile verificare gli aggiornamenti. Controlla la connessione.", file=sys.stderr)
+        return 1
+    if tag:
+        print(f"Aggiornamento disponibile: {tag}")
+        print("Scarica il nuovo DMG da: https://github.com/FloshDev/pydf_tool/releases")
+        return 0
+    print(f"PyDF Tool è già aggiornato (v{__version__}).")
     return 0
 
 

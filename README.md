@@ -112,6 +112,9 @@ pydf-tool compress /percorso/del/file.pdf --level 65 --output /percorso/output.p
 # Comprimi e converti in scala di grigi
 pydf-tool compress /percorso/del/file.pdf --level medium --grayscale
 
+# Verifica se è disponibile una nuova versione
+pydf-tool update
+
 # Mostra la guida per un comando specifico
 pydf-tool help ocr
 ```
@@ -126,6 +129,7 @@ Se `--output` viene omesso, il file di output viene creato nella stessa cartella
 | `ocr` | Converte un PDF scansionato in un PDF ricercabile o in un file di testo semplice |
 | `compress` | Riduce le dimensioni del PDF usando un livello preimpostato o un valore di qualita personalizzato |
 | `interactive` | Avvia esplicitamente la TUI interattiva |
+| `update` | Verifica se è disponibile una nuova versione |
 | `help` | Mostra la guida generale o la guida dettagliata per un sottocomando |
 
 ## Risoluzione dei problemi

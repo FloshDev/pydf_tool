@@ -16,6 +16,18 @@ def _parse_version(tag: str) -> tuple[int, ...]:
 
 def fetch_latest_version() -> str | None:
     """Return latest release tag (e.g. 'v1.0.2') if newer than current, else None."""
+    tag, error = check_update_status()
+    if error:
+        return None
+    return tag
+
+
+def check_update_status() -> tuple[str | None, bool]:
+    """
+    Return (latest_tag, error).
+    latest_tag is set when a newer version exists, None otherwise.
+    error is True when the check could not be performed.
+    """
     try:
         req = urllib.request.Request(
             _RELEASES_URL,
@@ -25,9 +37,9 @@ def fetch_latest_version() -> str | None:
             data = json.loads(resp.read().decode())
         tag = data.get("tag_name", "")
         if not tag:
-            return None
+            return None, False
         if _parse_version(tag) > _parse_version(__version__):
-            return tag
-        return None
+            return tag, False
+        return None, False
     except (URLError, OSError, ValueError, KeyError):
-        return None
+        return None, True
