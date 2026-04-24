@@ -1,8 +1,13 @@
 #!/bin/bash
-# Setup script per PyDF Tool su Python.org Python 3.12 macOS
-# Crea la venv, installa le dipendenze e patcha il wrapper pydf-tool.
-# Esegui questo script ogni volta che ricrei la venv da zero,
-# o dopo ogni `pip install -e .` manuale.
+# Workaround setup per PyDF Tool — SOLO per sviluppo locale con Python.org Python 3.12.
+#
+# Setup normale (pyenv / Homebrew Python / qualsiasi Python non-Python.org):
+#   pip install -e ".[dev]" && pytest tests/
+#
+# Usa questo script SOLO se ottieni ImportError su textual/rich dopo pip install,
+# causato dal bug UF_HIDDEN di macOS su Python.org Python 3.12 (i file installati
+# in .venv ricevono il flag hidden e risultano invisibili all'import system).
+# Vedi PROJECT_CONTEXT.md — "Decisioni architetturali non ovvie" per dettagli.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
