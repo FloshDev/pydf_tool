@@ -29,6 +29,7 @@ from .ocr import OCRResult, run_ocr
 from .preferences import Preferences, load_preferences, save_preferences
 from .progress import OperationProgress
 from .system_checks import SystemCheckReport, check_global_systems, check_operation_systems
+from .update_check import fetch_latest_version
 from .utils import (
     ensure_pdf_input,
     format_size_change,
@@ -334,6 +335,7 @@ class HomeScreen(MenuScreen):
                 id="home-subtitle",
             )
             yield Static("Scegli uno strumento per continuare.", id="home-tagline")
+            yield Static("", id="update-notice")
         with Horizontal(id="body"):
             with Vertical(id="menu-panel"):
                 yield Static("Strumenti", classes="panel-title")
@@ -352,6 +354,18 @@ class HomeScreen(MenuScreen):
     def on_mount(self) -> None:
         self._set_preview(_HOME_MENU_ITEMS[0].key)
         self.query_one("#menu-list", ListView).focus()
+        self._check_for_updates()
+
+    @work(thread=True)
+    def _check_for_updates(self) -> None:
+        tag = fetch_latest_version()
+        if tag:
+            self.app.call_from_thread(self._show_update_notice, tag)
+
+    def _show_update_notice(self, tag: str) -> None:
+        notice = self.query_one("#update-notice", Static)
+        notice.update(f"Aggiornamento disponibile: {tag} — github.com/FloshDev/pydf_tool/releases")
+        notice.add_class("visible")
 
     def _dispatch_action(self, action_id: str) -> None:
         if action_id == "ocr-menu":

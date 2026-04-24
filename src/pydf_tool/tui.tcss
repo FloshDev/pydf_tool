@@ -72,6 +72,17 @@ Screen {
     padding: 0 2 1 2;
 }
 
+#update-notice {
+    color: $accent;
+    padding: 0 2 1 2;
+    height: auto;
+    display: none;
+}
+
+#update-notice.visible {
+    display: block;
+}
+
 #footer-bar {
     color: $secondary;
     border-top: solid $border;
