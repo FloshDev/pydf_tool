@@ -4,9 +4,9 @@
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)](https://github.com/FloshDev/pydf_tool)
 [![License](https://img.shields.io/github/license/FloshDev/pydf_tool)](https://github.com/FloshDev/pydf_tool/blob/main/LICENSE)
 
-> Applicazione macOS autonoma per controllare, eseguire OCR e comprimere file PDF — senza bisogno di installare Python.
+> Strumento da riga di comando per macOS per controllare, eseguire OCR e comprimere file PDF — senza bisogno di installare Python.
 
-PyDF Tool gestisce tre operazioni comuni sui PDF: rilevare se un PDF scansionato contiene già testo ricercabile, eseguire l'OCR su scansioni per produrre un PDF ricercabile o testo semplice, e comprimere PDF pesanti con livelli di qualità preimpostati o personalizzati. Viene distribuito come bundle `.app` autonomo (Python incluso) e può essere usato sia tramite un'interfaccia TUI interattiva che direttamente da riga di comando.
+PyDF Tool gestisce tre operazioni comuni sui PDF: rilevare se un PDF scansionato contiene già testo ricercabile, eseguire l'OCR su scansioni per produrre un PDF ricercabile o testo semplice, e comprimere PDF pesanti con livelli di qualità preimpostati o personalizzati. Viene distribuito come bundle `.app` autonomo (Python incluso) che si usa **dal terminale** — sia tramite TUI interattiva che direttamente da riga di comando.
 
 ## Installazione
 
@@ -33,11 +33,18 @@ Non serve Python.org, `pip` o ambienti virtuali — l'app include il proprio int
 2. Apri il DMG e trascina **PyDF Tool** nella cartella **Applicazioni** usando il collegamento incluso
 3. Al primo avvio: macOS Gatekeeper avverte che lo sviluppatore non è identificato — fai clic destro sull'app → **Apri** (richiesto una sola volta)
 
+### Aggiornamenti
+
+All'avvio, PyDF Tool verifica automaticamente se è disponibile una nuova versione e mostra un avviso nella schermata principale. Per aggiornare:
+
+1. Scarica il nuovo DMG dalla pagina [Releases](https://github.com/FloshDev/pydf_tool/releases)
+2. Apri il DMG e trascina **PyDF Tool** nella cartella **Applicazioni**, sovrascrivendo la versione precedente
+
 ## Utilizzo
 
 ### TUI interattiva
 
-Avvia dal Finder aprendo **PyDF Tool.app**, oppure da qualsiasi terminale:
+PyDF Tool è un'applicazione da terminale. Aprendo **PyDF Tool.app** dal Finder si avvia automaticamente una nuova finestra di Terminal.app con la TUI. In alternativa, da qualsiasi terminale:
 
 ```bash
 pydf-tool
