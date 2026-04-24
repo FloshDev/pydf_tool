@@ -121,13 +121,13 @@ pydf-tool help ocr
 
 Se `--output` viene omesso, il file di output viene creato nella stessa cartella del file di input con un nome incrementale automatico.
 
-## Funzionalita
+## Funzionalità
 
 | Comando | Descrizione |
 |---|---|
 | `check` | Rileva se un PDF contiene già testo ricercabile o necessita di OCR |
 | `ocr` | Converte un PDF scansionato in un PDF ricercabile o in un file di testo semplice |
-| `compress` | Riduce le dimensioni del PDF usando un livello preimpostato o un valore di qualita personalizzato |
+| `compress` | Riduce le dimensioni del PDF usando un livello preimpostato o un valore di qualità personalizzato |
 | `interactive` | Avvia esplicitamente la TUI interattiva |
 | `update` | Verifica se è disponibile una nuova versione |
 | `help` | Mostra la guida generale o la guida dettagliata per un sottocomando |
@@ -135,19 +135,19 @@ Se `--output` viene omesso, il file di output viene creato nella stessa cartella
 ## Risoluzione dei problemi
 
 **macOS mostra l'avviso "sviluppatore non identificato"**
-Fai clic destro sull'app → **Apri**. E richiesto solo al primo avvio.
+Fai clic destro sull'app → **Apri**. È richiesto solo al primo avvio.
 
 **`tesseract`, `pdftocairo`/`pdftoppm` o `gs` non trovati**
 Installa o reinstalla le dipendenze di sistema tramite Homebrew (vedi [Prerequisiti](#prerequisiti)).
 
 **La TUI segnala prerequisiti mancanti**
-L'app esegue un controllo dei prerequisiti all'avvio e blocca OCR e compressione se uno strumento esterno richiesto e assente.
+L'app esegue un controllo dei prerequisiti all'avvio e blocca OCR e compressione se uno strumento esterno richiesto è assente.
 
 **Il PDF non viene riconosciuto dall'OCR**
 Esegui prima `pydf-tool check document.pdf`. File protetti da password o gravemente corrotti possono causare il fallimento dell'OCR.
 
 **La compressione non riduce significativamente le dimensioni del file**
-Se il PDF e gia molto compresso o contiene solo testo vettoriale, la riduzione dimensionale e limitata.
+Se il PDF è già molto compresso o contiene solo testo vettoriale, la riduzione dimensionale è limitata.
 
 ## Sviluppo
 
@@ -168,4 +168,4 @@ Lo script produce un `.dmg` in `dist/` con un collegamento ad Applicazioni per l
 
 ## Licenza
 
-Questo progetto e distribuito secondo i termini riportati nel file [LICENSE](LICENSE).
+Questo progetto è distribuito secondo i termini riportati nel file [LICENSE](LICENSE).
