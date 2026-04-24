@@ -44,7 +44,7 @@ All'avvio, PyDF Tool verifica automaticamente se è disponibile una nuova versio
 
 ### TUI interattiva
 
-PyDF Tool è un'applicazione da terminale. Aprendo **PyDF Tool.app** dal Finder si avvia automaticamente una nuova finestra di Terminal.app con la TUI. In alternativa, da qualsiasi terminale:
+PyDF Tool è un'applicazione da terminale. Aprendo **PyDF Tool.app** dal Finder si avvia automaticamente una nuova finestra di Terminal.app con la TUI. In alternativa, dopo aver configurato il comando `pydf-tool` come descritto nella sezione [CLI](#cli), da qualsiasi terminale:
 
 ```bash
 pydf-tool
@@ -69,30 +69,50 @@ La voce di menu **OCR** si espande in due sotto-azioni: **Controlla OCR** (rilev
 
 ### CLI
 
+La CLI permette di usare PyDF Tool direttamente da terminale, senza la TUI interattiva.
+
+#### 1. Apri Terminal
+
+Premi **Cmd+Spazio**, digita `Terminale` e premi Invio. Si apre la finestra del terminale.
+
+#### 2. Rendi disponibile il comando `pydf-tool`
+
+L'app include Python al suo interno ma non installa automaticamente il comando `pydf-tool` nel terminale. Esegui **una volta sola**:
+
+```bash
+echo 'alias pydf-tool="/Applications/PyDF Tool.app/Contents/Frameworks/python/bin/python3 -m pydf_tool"' >> ~/.zshrc && source ~/.zshrc
+```
+
+Da quel momento `pydf-tool` sarà disponibile in ogni nuova finestra di terminale.
+
+#### 3. Ottieni il percorso del file PDF
+
+Per indicare un file al comando, hai bisogno del suo percorso completo. Il modo più semplice: trascina il file PDF direttamente nella finestra del terminale — il percorso viene incollato automaticamente.
+
+In alternativa, usa `~/Desktop/documento.pdf` per un file sul Desktop, o il percorso completo come `/Users/tuonome/Documenti/documento.pdf`.
+
+#### 4. Comandi
+
 ```bash
 # Controlla se un PDF contiene già testo ricercabile
-pydf-tool check document.pdf
+pydf-tool check /percorso/del/file.pdf
 
-# OCR su un PDF scansionato — output come PDF ricercabile
-pydf-tool ocr scan.pdf --lang it --output output.pdf
+# OCR su un PDF scansionato — produce un PDF ricercabile
+pydf-tool ocr /percorso/del/file.pdf --lang it --output /percorso/output.pdf
 
-# OCR con più lingue, output come testo semplice
-pydf-tool ocr scan.pdf --lang it+en --output scan.txt
+# OCR con più lingue, output come file di testo
+pydf-tool ocr /percorso/del/file.pdf --lang it+en --output /percorso/output.txt
 
-# Compressione con un livello preimpostato
-pydf-tool compress document.pdf --level medium --output output.pdf
+# Compressione con livello preimpostato (low / medium / high)
+pydf-tool compress /percorso/del/file.pdf --level medium --output /percorso/output.pdf
 
-# Compressione con un livello di qualità personalizzato (0–100)
-pydf-tool compress document.pdf --level 65 --output document-small.pdf
+# Compressione con qualità personalizzata (0 = massima compressione, 100 = qualità originale)
+pydf-tool compress /percorso/del/file.pdf --level 65 --output /percorso/output.pdf
 
 # Comprimi e converti in scala di grigi
-pydf-tool compress document.pdf --level medium --grayscale
+pydf-tool compress /percorso/del/file.pdf --level medium --grayscale
 
-# Avvia la TUI interattiva in modo esplicito
-pydf-tool interactive
-
-# Mostra la guida generale o la guida per un sottocomando
-pydf-tool help
+# Mostra la guida per un comando specifico
 pydf-tool help ocr
 ```
 
