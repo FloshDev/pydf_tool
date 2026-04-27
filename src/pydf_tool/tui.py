@@ -104,7 +104,7 @@ _OCR_MENU_ITEMS: list[MenuEntry] = [
         summary="Analizza se il PDF ha gia testo ricercabile.",
         preview_title="Verifica OCR",
         preview_body=(
-            "Legge i metadati del PDF e stima se OCR e necessario.\n"
+            "Legge i metadati del PDF e stima se OCR è necessario.\n"
             "Se serve, potrai poi passare direttamente al wizard OCR."
         ),
         preview_hint="Invio apre la verifica OCR",
@@ -891,6 +891,10 @@ class CheckInputScreen(Screen):
         Binding("f2", "pick_pdf_from_finder", "Finder"),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._checking = False
+
     def compose(self) -> ComposeResult:
         with Vertical(id="check-panel"):
             yield Static("Verifica OCR", id="wizard-title")
@@ -916,6 +920,8 @@ class CheckInputScreen(Screen):
             self._move_focus(-1)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        if self._checking:
+            return
         path_str = event.value.strip()
         if not path_str:
             self.query_one("#check-error", Static).update("Percorso obbligatorio.")
@@ -926,13 +932,37 @@ class CheckInputScreen(Screen):
         except PDFToolError as e:
             self.query_one("#check-error", Static).update(str(e))
             return
+        self._set_checking(True)
+        self._run_check(path)
+
+    @work(thread=True)
+    def _run_check(self, path: Path) -> None:
         try:
             result = check_ocr(path)
+            self.app.call_from_thread(self._on_check_done, path, result)
         except PDFToolError as e:
-            self.query_one("#check-error", Static).update(str(e))
-            return
+            self.app.call_from_thread(self._on_check_error, str(e))
+
+    def _on_check_done(self, path: Path, result: CheckOCRResult) -> None:
         cast("PyDFApp", self.app).remember_path(path)
+        self._set_checking(False)
         self.app.push_screen(CheckResultScreen(result=result, input_path=path))
+
+    def _on_check_error(self, message: str) -> None:
+        self._set_checking(False)
+        self.query_one("#check-error", Static).update(message)
+
+    def _set_checking(self, active: bool) -> None:
+        self._checking = active
+        inp = self.query_one("#check-input", Input)
+        btn = self.query_one("#check-picker-button", Button)
+        inp.disabled = active
+        btn.disabled = active
+        error = self.query_one("#check-error", Static)
+        if active:
+            error.update("Analisi in corso...")
+        else:
+            error.update("")
 
     def action_go_back(self) -> None:
         self.app.pop_screen()
@@ -942,6 +972,8 @@ class CheckInputScreen(Screen):
             self.action_pick_pdf_from_finder()
 
     def action_pick_pdf_from_finder(self) -> None:
+        if self._checking:
+            return
         try:
             selected = choose_pdf_file(
                 initial_directory=_preferences_for_app(self.app).last_directory,
@@ -1083,9 +1115,7 @@ class CheckResultScreen(Screen):
     def _launch_ocr(self) -> None:
         if not cast("PyDFApp", self.app).ensure_operation_available("ocr"):
             return
-        self.app.pop_screen()  # pop CheckResultScreen
-        self.app.pop_screen()  # pop CheckInputScreen
-        self.app.pop_screen()  # pop OCRMenuScreen
+        _return_to_home(self.app)
         self.app.push_screen(WizardScreen(mode="ocr", prefill_path=str(self._input_path)))
 
     def _go_home(self) -> None:

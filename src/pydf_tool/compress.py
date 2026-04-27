@@ -58,10 +58,7 @@ def resolve_compression_profile(level: str) -> CompressionProfile:
         label = str(strength)
 
     dpi = 300 - round(((strength - 1) / 99) * (300 - 72))
-    if strength <= 60:
-        pdf_setting = "/ebook"
-    else:
-        pdf_setting = "/screen"
+    pdf_setting = "/ebook"
 
     return CompressionProfile(
         label=label,

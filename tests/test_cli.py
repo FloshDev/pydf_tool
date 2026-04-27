@@ -669,6 +669,16 @@ class CompressionHelpersTestCase(unittest.TestCase):
             profile = resolve_compression_profile(preset)
             self.assertNotEqual(profile.pdf_setting, "/printer", f"preset '{preset}' must not use /printer (inflates files)")
 
+    def test_all_presets_use_ebook_setting(self) -> None:
+        for preset in ("low", "medium", "high"):
+            profile = resolve_compression_profile(preset)
+            self.assertEqual(profile.pdf_setting, "/ebook", f"preset '{preset}' must use /ebook (no quality cliff)")
+
+    def test_numeric_levels_use_ebook_setting(self) -> None:
+        for level in ("1", "60", "61", "100"):
+            profile = resolve_compression_profile(level)
+            self.assertEqual(profile.pdf_setting, "/ebook", f"level '{level}' must use /ebook (no quality cliff)")
+
     def test_low_preset_uses_ebook_setting(self) -> None:
         profile = resolve_compression_profile("low")
         self.assertEqual(profile.pdf_setting, "/ebook")
@@ -706,7 +716,7 @@ class CompressionHelpersTestCase(unittest.TestCase):
 
         self.assertEqual(result.output_path, output_path)
         self.assertFalse(result.grayscale)
-        self.assertIn("-dPDFSETTINGS=/screen", captured["command"])
+        self.assertIn("-dPDFSETTINGS=/ebook", captured["command"])
         staged_output_arg = next(
             part for part in captured["command"] if part.startswith("-sOutputFile=")
         )
@@ -1034,7 +1044,7 @@ class CLITestCase(unittest.TestCase):
             exit_code = main(["help"])
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("{ocr,compress,check,interactive,help}", stdout.getvalue())
+        self.assertIn("{ocr,compress,check,interactive,update,help}", stdout.getvalue())
 
     def test_main_supports_help_for_specific_subcommand(self) -> None:
         stdout = io.StringIO()

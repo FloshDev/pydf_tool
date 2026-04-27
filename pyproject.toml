@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydf-tool"
-version = "1.0.3"
+version = "1.0.4"
 description = "PyDF Tool: OCR e compressione PDF per macOS"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,3 +24,8 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

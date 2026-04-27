@@ -29,7 +29,7 @@ Non serve Python.org, `pip` o ambienti virtuali — l'app include il proprio int
 
 ### Download
 
-1. Scarica `PyDF-Tool-v1.0.3.dmg` dalla pagina [Releases](https://github.com/FloshDev/pydf_tool/releases)
+1. Scarica `PyDF-Tool-v1.0.4.dmg` dalla pagina [Releases](https://github.com/FloshDev/pydf_tool/releases)
 2. Apri il DMG e trascina **PyDF Tool** nella cartella **Applicazioni** usando il collegamento incluso
 3. Al primo avvio: macOS Gatekeeper avverte che lo sviluppatore non è identificato — fai clic destro sull'app → **Apri** (richiesto una sola volta)
 
