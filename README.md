@@ -146,6 +146,9 @@ L'app esegue un controllo dei prerequisiti all'avvio e blocca OCR e compressione
 **Il PDF non viene riconosciuto dall'OCR**
 Esegui prima `pydf-tool check document.pdf`. File protetti da password o gravemente corrotti possono causare il fallimento dell'OCR.
 
+**L'OCR produce errori su codice sorgente, simboli matematici o caratteri speciali**
+Tesseract è addestrato su testo naturale. PDF che contengono codice C++, Python, formule matematiche o pseudocodice producono inevitabilmente errori di trascrizione (es. `*` letto come `+`, `~` scomparso, `::` spezzato). Il motore OCR in questo caso produce una trascrizione approssimativa, non fedele — usa il risultato come punto di partenza per correzioni manuali.
+
 **La compressione non riduce significativamente le dimensioni del file**
 Se il PDF è già molto compresso o contiene solo testo vettoriale, la riduzione dimensionale è limitata.
 

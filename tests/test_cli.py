@@ -842,7 +842,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
     def test_run_ocr_uses_pdftoppm_when_pdftocairo_missing(self) -> None:
         fake_pytesseract = types.SimpleNamespace(
             get_languages=lambda config="": ["ita"],
-            image_to_string=lambda image, lang="": "ciao",
+            image_to_string=lambda image, lang="", config="": "ciao",
         )
 
         convert_calls: dict[str, object] = {}
@@ -889,7 +889,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
 
         fake_pytesseract = types.SimpleNamespace(
             get_languages=lambda config="": ["ita"],
-            image_to_string=lambda image, lang="": "ciao",
+            image_to_string=lambda image, lang="", config="": "ciao",
         )
         fake_pdf2image = types.SimpleNamespace(
             convert_from_path=lambda path, dpi, use_pdftocairo, first_page=None, last_page=None: ["image-1"]
@@ -932,7 +932,7 @@ class OCRRuntimeTestCase(unittest.TestCase):
     def test_run_ocr_wraps_runtime_errors(self) -> None:
         fake_pytesseract = types.SimpleNamespace(
             get_languages=lambda config="": ["ita"],
-            image_to_string=lambda image, lang="": (_ for _ in ()).throw(
+            image_to_string=lambda image, lang="", config="": (_ for _ in ()).throw(
                 RuntimeError("ocr boom")
             ),
         )

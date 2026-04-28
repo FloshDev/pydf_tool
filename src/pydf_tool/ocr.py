@@ -162,7 +162,7 @@ def run_ocr(
                 del page_imgs
                 try:
                     text = pytesseract.image_to_string(
-                        image, lang=tesseract_lang
+                        image, lang=tesseract_lang, config="--oem 1 --psm 6"
                     ).strip()
                 except Exception as exc:
                     raise PDFToolError(
@@ -226,6 +226,7 @@ def run_ocr(
                     image,
                     extension="pdf",
                     lang=tesseract_lang,
+                    config="--oem 1 --psm 6",
                 )
                 page_reader = PdfReader(BytesIO(searchable_page))
                 writer.add_page(page_reader.pages[0])
@@ -299,7 +300,9 @@ def run_ocr(
         page_texts_batch: list[str] = []
         for index, image in enumerate(images, start=1):
             try:
-                text = pytesseract.image_to_string(image, lang=tesseract_lang).strip()
+                text = pytesseract.image_to_string(
+                    image, lang=tesseract_lang, config="--oem 1 --psm 6"
+                ).strip()
             except Exception as exc:
                 raise PDFToolError(
                     f"OCR fallito sulla pagina {index}. "
@@ -342,6 +345,7 @@ def run_ocr(
                 image,
                 extension="pdf",
                 lang=tesseract_lang,
+                config="--oem 1 --psm 6",
             )
             page_reader = PdfReader(BytesIO(searchable_page))
             writer.add_page(page_reader.pages[0])
