@@ -80,7 +80,7 @@ Premi **Cmd+Spazio**, digita `Terminale` e premi Invio. Si apre la finestra del 
 L'app include Python al suo interno ma non installa automaticamente il comando `pydf-tool` nel terminale. Esegui **una volta sola**:
 
 ```bash
-echo 'alias pydf-tool="/Applications/PyDF Tool.app/Contents/Frameworks/python/bin/python3 -m pydf_tool"' >> ~/.zshrc && source ~/.zshrc
+echo 'pydf-tool() { "/Applications/PyDF Tool.app/Contents/Frameworks/python/bin/python3" -m pydf_tool "$@"; }' >> ~/.zshrc && source ~/.zshrc
 ```
 
 Da quel momento `pydf-tool` sarà disponibile in ogni nuova finestra di terminale.
