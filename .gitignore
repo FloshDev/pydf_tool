@@ -39,6 +39,7 @@ tmp/
 # Internal project documentation (not for public repo)
 GUIDA_CODICE.md
 PROJECT_CONTEXT.md
+REFACTORING_PLAN.md
 COMPONENTS.md
 CHECKLIST_BETA.md
 docs/
