@@ -120,6 +120,24 @@ che ritorna il percorso selezionato o `None` su cancel.
 
 ---
 
+## Sessione 6 — File minori
+
+**`tui.tcss`**
+- Rimuovere `$surface-accent: #2B2416` (riga 10) — variabile definita ma mai usata nel CSS
+- Rimuovere `.success-label { color: $success; }` (righe 214–216) — classe mai applicata in tui.py
+
+**`system_checks.py`**
+- Rimuovere `"ToolSpec"` da `__all__` — tipo interno, non fa parte dell'API pubblica
+- Semplificare `_normalize_operation`: rimuovere alias morti `"all"`, `"system"`, `"sistema"` — nessun codice li usa; `"global"` è già in `_CHECKS_BY_OPERATION`
+
+**`update_check.py` + `tui.py`**
+- Rimuovere `fetch_latest_version()` — wrapper a una riga attorno a `check_update_status()` senza valore aggiunto
+- Aggiornare tui.py: `from .update_check import check_update_status` e `tag, _ = check_update_status()`
+
+**File già ottimali (non toccare):** `__init__.py`, `__main__.py`, `progress.py`, `errors.py`, `preferences.py`, `check_ocr.py`
+
+---
+
 ## Note operative per le sessioni
 
 - Ogni sessione: eseguire `pytest tests/` a fine lavoro — 0 regressioni ammesse
