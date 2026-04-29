@@ -82,7 +82,7 @@ Premi **Cmd+Spazio**, digita `Terminale` e premi Invio. Si apre la finestra del 
 L'app include Python al suo interno ma non installa automaticamente il comando `pydf-tool` nel terminale. Esegui **una volta sola**:
 
 ```bash
-echo 'pydf-tool() { "/Applications/PyDF Tool.app/Contents/Frameworks/python/bin/python3" -m pydf_tool "$@"; }' >> ~/.zshrc && source ~/.zshrc
+echo 'pydf-tool() { PYTHONPATH="/Applications/PyDF Tool.app/Contents/Resources/src:/Applications/PyDF Tool.app/Contents/Resources/pydf-packages" "/Applications/PyDF Tool.app/Contents/Frameworks/python/bin/python3" -m pydf_tool "$@"; }' >> ~/.zshrc && source ~/.zshrc
 ```
 
 Da quel momento `pydf-tool` sarà disponibile in ogni nuova finestra di terminale.
@@ -170,6 +170,10 @@ scripts/build_macos_app.sh
 ```
 
 Lo script produce un `.dmg` in `dist/` con un collegamento ad Applicazioni per l'installazione tramite trascinamento. Eventuali DMG precedenti della stessa versione vengono rimossi prima della build.
+
+## Vibecoding
+
+Questo progetto è sviluppato interamente in **vibecoding** — il codice è scritto in collaborazione con un AI assistant (Claude), iterando velocemente su idee, fix e feature senza seguire un piano rigido. Il risultato è software funzionante, ma il processo è volutamente fluido e sperimentale.
 
 ## Licenza
 
