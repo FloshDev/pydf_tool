@@ -204,16 +204,6 @@ def _execute_handler(args: argparse.Namespace) -> int:
         return 130
 
 
-def _dispatch_interactive_command(command_line: str) -> int:
-    from .tui import dispatch_interactive_command
-
-    return dispatch_interactive_command(
-        command_line,
-        parser_factory=build_parser,
-        executor=_execute_handler,
-    )
-
-
 def _run_interactive_shell() -> int:
     from .tui import run_interactive_app
 

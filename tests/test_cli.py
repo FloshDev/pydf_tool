@@ -13,7 +13,7 @@ from unittest.mock import patch
 from textual.widgets import Input, ListView, ProgressBar, Static
 
 from pydf_tool.check_ocr import CheckOCRResult, check_ocr
-from pydf_tool.cli import _dispatch_interactive_command, _run_interactive_shell, main
+from pydf_tool.cli import _run_interactive_shell, main
 from pydf_tool.compress import (
     compress_pdf,
     resolve_compress_output_path,
@@ -1056,52 +1056,12 @@ class CLITestCase(unittest.TestCase):
         self.assertIn("--lang", stdout.getvalue())
         self.assertIn("--output", stdout.getvalue())
 
-    @patch("pydf_tool.cli.run_ocr")
-    def test_dispatch_interactive_command_supports_direct_ocr_command(
-        self,
-        mock_run_ocr,
-    ) -> None:
-        mock_run_ocr.return_value = OCRResult(
-            output_path=Path("scan.1.pdf"),
-            pages=2,
-            output_type="pdf",
-        )
-        stdout = io.StringIO()
-
-        with redirect_stdout(stdout):
-            exit_code = _dispatch_interactive_command(
-                'ocr "scan.pdf" --lang it --output "out.pdf"'
-            )
-
-        self.assertEqual(exit_code, 0)
-        mock_run_ocr.assert_called_once_with(
-            input_path=Path("scan.pdf"),
-            output_path="out.pdf",
-            lang="it",
-        )
-
     @patch("pydf_tool.tui.PyDFApp.run")
     def test_interactive_shell_runs_app(self, mock_run) -> None:
         mock_run.return_value = None
         exit_code = _run_interactive_shell()
         mock_run.assert_called_once()
         self.assertEqual(exit_code, 0)
-
-    def test_dispatch_interactive_command_supports_help(self) -> None:
-        stdout = io.StringIO()
-        with redirect_stdout(stdout):
-            exit_code = _dispatch_interactive_command("help")
-        self.assertEqual(exit_code, 0)
-        self.assertIn("pydf-tool", stdout.getvalue())
-
-    def test_dispatch_interactive_command_supports_command_help(self) -> None:
-        stdout = io.StringIO()
-
-        with redirect_stdout(stdout):
-            exit_code = _dispatch_interactive_command("help compress")
-
-        self.assertEqual(exit_code, 0)
-        self.assertIn("--level", stdout.getvalue())
 
     def test_pyproject_configures_entry_point(self) -> None:
         import tomllib

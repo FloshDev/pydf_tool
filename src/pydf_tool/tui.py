@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import argparse
-import shlex
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -37,9 +34,7 @@ from .utils import (
     resolve_user_path,
 )
 
-# ── Costanti ──────────────────────────────────────────────────────────────────
-
-EXIT_COMMANDS = {"exit", "quit", ":q"}
+# ── Struttura dati ────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class MenuEntry:
@@ -58,6 +53,85 @@ class WizardChoice:
     summary: str = ""
 
 
+@dataclass
+class WizardStep:
+    name: str
+    prompt: str
+    placeholder: str
+    choices: list[WizardChoice] | None = None
+
+
+# ── TESTI UI — modifica qui ────────────────────────────────────────────────────
+# Tutto il copy visibile all'utente è centralizzato qui.
+# Regola: cambia liberamente le stringhe.
+# Non cambiare: MenuEntry.key, WizardStep.name, WizardChoice.value, Button id.
+
+# -- Footer di navigazione --
+_FOOTER_HOME           = "↑↓ naviga   Invio apre   H/F1 help   Q/Esc esci"
+_FOOTER_SUBMENU        = "↑↓ naviga   Invio apre   Esc torna indietro"
+_FOOTER_WIZARD_INPUT   = "Invio avanza   Esc torna indietro"
+_FOOTER_WIZARD_FILE    = "Invio avanza   F2 Finder   Esc torna indietro"
+_FOOTER_WIZARD_OUTPUT  = "Invio avanza   F2 cartella   Esc torna indietro"
+_FOOTER_WIZARD_CHOICE  = "↑↓ seleziona   Invio conferma   Esc torna indietro"
+_FOOTER_CHECK_INPUT    = "Invio conferma   F2 Finder   Esc annulla"
+_FOOTER_RESULT_ACTIONS = "↑↓ cambia pulsante   Invio conferma   Esc torna al menu"
+_FOOTER_PROGRESS       = "Ctrl+C per annullare"
+_FOOTER_DISMISS        = "Invio · Esc · Q chiudono questa schermata"
+
+# -- Messaggi di stato --
+_MSG_STARTING            = "Avvio in corso..."
+_MSG_CHECKING            = "Analisi in corso..."
+_MSG_CANCELLED           = "Operazione annullata."
+_MSG_SYSTEM_CHECK_INTRO  = "Alcuni strumenti esterni non sono disponibili in questo ambiente."
+_TITLE_PREREQUISITES     = "Prerequisiti mancanti"
+
+# -- Fasi operazione (ProgressScreen) --
+_STAGE_LABELS: dict[str, str] = {
+    "prepare":  "Preparazione",
+    "render":   "Rendering",
+    "ocr":      "OCR",
+    "compress": "Compressione",
+    "finalize": "Salvataggio",
+    "done":     "Completato",
+}
+
+# -- Verdetti verifica OCR --
+_VERDICT_LABELS: dict[str, str] = {
+    "ocr_needed":         "OCR necessario",
+    "already_searchable": "Già ricercabile",
+    "mixed":              "Parzialmente ricercabile",
+}
+
+# -- Errori di validazione wizard --
+_ERR_PATH_REQUIRED      = "Percorso obbligatorio."
+_ERR_GRADE_REQUIRED     = "Inserisci un valore tra 1 e 100."
+_ERR_GRADE_NOT_NUMERIC  = "Il grado personalizzato deve essere numerico."
+_ERR_GRADE_OUT_OF_RANGE = "Il grado personalizzato deve essere tra 1 e 100."
+
+# -- Help --
+_HELP_TEXT = """\
+Flussi supportati
+
+  · Verifica OCR: analizza se il PDF ha già testo ricercabile
+  · Esegui OCR: converti PDF scansionato in PDF ricercabile o TXT
+  · Comprimi PDF: preset low / medium / high
+
+Controlli
+
+  · ↑ / ↓  naviga nel menu
+  · Invio   apre l'azione selezionata
+  · H o F1  apre l'help
+  · Q o Esc esce dalla home
+  · Ctrl+C  annulla OCR o compressione in corso
+
+Suggerimenti
+
+  · OCR apre un sottomenu con Verifica OCR e Esegui OCR
+  · Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo
+  · Esegui OCR in TXT: scegli formato TXT nel flusso guidato
+  · Se annulli una compressione, il file parziale viene rimosso"""
+
+# -- Voci menu principale --
 _HOME_MENU_ITEMS: list[MenuEntry] = [
     MenuEntry(
         key="ocr-menu",
@@ -97,11 +171,12 @@ _HOME_MENU_ITEMS: list[MenuEntry] = [
     ),
 ]
 
+# -- Voci sottomenu OCR --
 _OCR_MENU_ITEMS: list[MenuEntry] = [
     MenuEntry(
         key="check",
         title="Verifica OCR",
-        summary="Analizza se il PDF ha gia testo ricercabile.",
+        summary="Analizza se il PDF ha già testo ricercabile.",
         preview_title="Verifica OCR",
         preview_body=(
             "Legge i metadati del PDF e stima se OCR è necessario.\n"
@@ -122,47 +197,65 @@ _OCR_MENU_ITEMS: list[MenuEntry] = [
     ),
 ]
 
-_FOOTER_HOME = "↑↓ naviga   Invio apre   H/F1 help   Q/Esc esci"
-_FOOTER_SUBMENU = "↑↓ naviga   Invio apre   Esc torna indietro"
-_FOOTER_WIZARD_INPUT = "Invio avanza   Esc torna indietro"
-_FOOTER_WIZARD_FILE = "Invio avanza   F2 Finder   Esc torna indietro"
-_FOOTER_WIZARD_OUTPUT = "Invio avanza   F2 cartella   Esc torna indietro"
-_FOOTER_WIZARD_CHOICE = "↑↓ seleziona   Invio conferma   Esc torna indietro"
-_FOOTER_CHECK_INPUT = "Invio conferma   F2 Finder   Esc annulla"
-_FOOTER_RESULT_ACTIONS = "↑↓ cambia pulsante   Invio conferma   Esc torna al menu"
-
-_HELP_TEXT = """\
-Flussi supportati
-
-  · Verifica OCR: analizza se il PDF ha già testo ricercabile
-  · Esegui OCR: converti PDF scansionato in PDF ricercabile o TXT
-  · Comprimi PDF: preset low / medium / high
-
-Controlli
-
-  · ↑ / ↓  naviga nel menu
-  · Invio   apre l'azione selezionata
-  · H o F1  apre l'help
-  · Q o Esc esce dalla home
-  · Ctrl+C  annulla OCR o compressione in corso
-
-Suggerimenti
-
-  · OCR apre un sottomenu con Verifica OCR e Esegui OCR
-  · Verifica OCR propone di avviare Esegui OCR se il PDF non ha testo
-  · Esegui OCR in TXT: scegli formato TXT nel flusso guidato
-  · Se annulli una compressione, il file parziale viene rimosso"""
-
-_HELP_TEXT_PLAIN = """\
-PyDF Tool — strumenti PDF da riga di comando
-
-  pydf-tool ocr FILE [--lang LINGUA] [--output PATH]
-  pydf-tool compress FILE [--level low|medium|high|1-100] [--output PATH] [--grayscale]
-  pydf-tool check FILE
-
-Per OCR, l'output è PDF o TXT in base all'estensione di PATH.
-Usa 'pydf-tool COMANDO --help' per dettagli sul singolo comando."""
-
+# -- Passi wizard OCR e compressione --
+_WIZARD_STEPS: dict[str, list[WizardStep]] = {
+    "ocr": [
+        WizardStep("File",   "Percorso del PDF da elaborare:",  "es. ~/Documents/doc.pdf"),
+        WizardStep(
+            "Lingua",
+            "Lingua del documento:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("it",    "Italiano",            "OCR in italiano."),
+                WizardChoice("en",    "Inglese",             "OCR in inglese."),
+                WizardChoice("it+en", "Italiano + Inglese",  "Riconoscimento bilingue."),
+            ],
+        ),
+        WizardStep(
+            "Formato",
+            "Formato output:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("pdf", "PDF ricercabile", "Mantiene il layout del documento."),
+                WizardChoice("txt", "Testo TXT",       "Esporta solo il testo estratto."),
+            ],
+        ),
+        WizardStep(
+            "Output",
+            "Percorso file di output:",
+            "es. ~/Desktop/out.pdf (vuoto = stessa cartella del file di partenza)",
+        ),
+    ],
+    "compress": [
+        WizardStep("File",  "Percorso del PDF da comprimere:", "es. ~/Documents/doc.pdf"),
+        WizardStep(
+            "Livello",
+            "Livello di compressione:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("low",    "Low",            "Compressione leggera, qualità più alta."),
+                WizardChoice("medium", "Medium",         "Bilanciamento tra qualità e peso."),
+                WizardChoice("high",   "High",           "Compressione forte, file più leggero."),
+                WizardChoice("custom", "Personalizzato", "Inserisci un valore numerico da 1 a 100."),
+            ],
+        ),
+        WizardStep("Grado",  "Grado personalizzato di compressione:", "1-100"),
+        WizardStep(
+            "Colore",
+            "Modalità colore:",
+            "seleziona con le frecce",
+            choices=[
+                WizardChoice("color", "Colori originali", "Mantiene il PDF a colori."),
+                WizardChoice("gray",  "Scala di grigi",   "Riduce il peso convertendo in grigio."),
+            ],
+        ),
+        WizardStep(
+            "Output",
+            "Percorso file di output:",
+            "es. ~/Desktop/out.pdf (vuoto = stessa cartella del file di partenza)",
+        ),
+    ],
+}
 
 def _return_to_home(app: App) -> None:
     while len(app.screen_stack) > 1 and not isinstance(app.screen, HomeScreen):
@@ -203,6 +296,8 @@ def _suggest_output_path_in_directory(
         index += 1
 
 
+# ── SystemCheckScreen ─────────────────────────────────────────────────────────
+
 class SystemCheckScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "dismiss_screen", "Chiudi"),
@@ -218,17 +313,14 @@ class SystemCheckScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="system-check-panel"):
             yield Static(self._title, id="wizard-title")
-            yield Static(
-                "Alcuni strumenti esterni non sono disponibili in questo ambiente.",
-                id="step-prompt",
-            )
+            yield Static(_MSG_SYSTEM_CHECK_INTRO, id="step-prompt")
             yield ScrollableContainer(
                 Static(self._report.message, id="system-check-content"),
                 id="system-check-container",
             )
             with Vertical(id="system-check-buttons"):
                 yield Button("Chiudi", id="btn-close-system-check")
-        yield Static("Invio · Esc · Q chiudono questa schermata", id="footer-bar")
+        yield Static(_FOOTER_DISMISS, id="footer-bar")
 
     def on_mount(self) -> None:
         self.query_one("#btn-close-system-check", Button).focus()
@@ -261,7 +353,7 @@ class HelpScreen(ModalScreen):
                 Static(_HELP_TEXT, id="help-content"),
                 id="help-container",
             )
-        yield Static("Invio · Esc · Q chiudono questa schermata", id="footer-bar")
+        yield Static(_FOOTER_DISMISS, id="footer-bar")
 
     def action_dismiss_screen(self) -> None:
         self.dismiss()
@@ -434,75 +526,7 @@ class OCRMenuScreen(MenuScreen):
         self.app.push_screen(HelpScreen())
 
 
-# ── WizardScreen (Phase 3) ────────────────────────────────────────────────────
-
-@dataclass
-class WizardStep:
-    name: str
-    prompt: str
-    placeholder: str
-    choices: list[WizardChoice] | None = None
-
-
-_WIZARD_STEPS: dict[str, list[WizardStep]] = {
-    "ocr": [
-        WizardStep("File",    "Percorso del PDF da elaborare:",    "es. ~/Documents/doc.pdf"),
-        WizardStep(
-            "Lingua",
-            "Lingua del documento:",
-            "seleziona con le frecce",
-            choices=[
-                WizardChoice("it", "Italiano", "OCR in italiano."),
-                WizardChoice("en", "Inglese", "OCR in inglese."),
-                WizardChoice("it+en", "Italiano + Inglese", "Riconoscimento bilingue."),
-            ],
-        ),
-        WizardStep(
-            "Formato",
-            "Formato output:",
-            "seleziona con le frecce",
-            choices=[
-                WizardChoice("pdf", "PDF ricercabile", "Mantiene il layout del documento."),
-                WizardChoice("txt", "Testo TXT", "Esporta solo il testo estratto."),
-            ],
-        ),
-        WizardStep(
-            "Output",
-            "Percorso file di output:",
-            "es. ~/Desktop/out.pdf (vuoto = stessa cartella del file di partenza)",
-        ),
-    ],
-    "compress": [
-        WizardStep("File",    "Percorso del PDF da comprimere:",   "es. ~/Documents/doc.pdf"),
-        WizardStep(
-            "Livello",
-            "Livello di compressione:",
-            "seleziona con le frecce",
-            choices=[
-                WizardChoice("low", "Low", "Compressione leggera, qualità più alta."),
-                WizardChoice("medium", "Medium", "Bilanciamento tra qualità e peso."),
-                WizardChoice("high", "High", "Compressione forte, file più leggero."),
-                WizardChoice("custom", "Personalizzato", "Inserisci un valore numerico da 1 a 100."),
-            ],
-        ),
-        WizardStep("Grado",   "Grado personalizzato di compressione:", "1-100"),
-        WizardStep(
-            "Colore",
-            "Modalità colore:",
-            "seleziona con le frecce",
-            choices=[
-                WizardChoice("color", "Colori originali", "Mantiene il PDF a colori."),
-                WizardChoice("gray", "Scala di grigi", "Riduce il peso convertendo in grigio."),
-            ],
-        ),
-        WizardStep(
-            "Output",
-            "Percorso file di output:",
-            "es. ~/Desktop/out.pdf (vuoto = stessa cartella del file di partenza)",
-        ),
-    ],
-}
-
+# ── WizardScreen ──────────────────────────────────────────────────────────────
 
 class WizardScreen(Screen):
     BINDINGS = [
@@ -748,19 +772,19 @@ class WizardScreen(Screen):
     def _validate(self, step: int, value: str, s: WizardStep) -> str:
         if s.name == "File":
             if not value:
-                return "Percorso obbligatorio."
+                return _ERR_PATH_REQUIRED
             try:
                 ensure_pdf_input(resolve_user_path(value))
             except PDFToolError as e:
                 return str(e)
         elif s.name == "Grado":
             if not value:
-                return "Inserisci un valore tra 1 e 100."
+                return _ERR_GRADE_REQUIRED
             if not value.isdigit():
-                return "Il grado personalizzato deve essere numerico."
+                return _ERR_GRADE_NOT_NUMERIC
             numeric = int(value)
             if numeric < 1 or numeric > 100:
-                return "Il grado personalizzato deve essere tra 1 e 100."
+                return _ERR_GRADE_OUT_OF_RANGE
         elif s.choices and value not in {choice.value for choice in s.choices}:
             return f"Scegli tra: {' · '.join(choice.value for choice in s.choices)}"
         return ""
@@ -883,7 +907,7 @@ class WizardScreen(Screen):
         self.app.push_screen(HelpScreen())
 
 
-# ── CheckInputScreen + CheckResultScreen (Phase 4) ────────────────────────────
+# ── CheckInputScreen / CheckResultScreen ─────────────────────────────────────
 
 class CheckInputScreen(Screen):
     BINDINGS = [
@@ -924,7 +948,7 @@ class CheckInputScreen(Screen):
             return
         path_str = event.value.strip()
         if not path_str:
-            self.query_one("#check-error", Static).update("Percorso obbligatorio.")
+            self.query_one("#check-error", Static).update(_ERR_PATH_REQUIRED)
             return
         try:
             path = resolve_user_path(path_str)
@@ -960,7 +984,7 @@ class CheckInputScreen(Screen):
         btn.disabled = active
         error = self.query_one("#check-error", Static)
         if active:
-            error.update("Analisi in corso...")
+            error.update(_MSG_CHECKING)
         else:
             error.update("")
 
@@ -1017,11 +1041,7 @@ class CheckInputScreen(Screen):
 
 
 def _verdict_label(verdict: str) -> str:
-    return {
-        "ocr_needed": "OCR necessario",
-        "already_searchable": "Già ricercabile",
-        "mixed": "Parzialmente ricercabile",
-    }.get(verdict, verdict)
+    return _VERDICT_LABELS.get(verdict, verdict)
 
 
 class CheckResultScreen(Screen):
@@ -1122,7 +1142,7 @@ class CheckResultScreen(Screen):
         _return_to_home(self.app)
 
 
-# ── ProgressScreen (Phase 5) ──────────────────────────────────────────────────
+# ── ProgressScreen ────────────────────────────────────────────────────────────
 
 class ProgressScreen(Screen):
     BINDINGS = [
@@ -1149,7 +1169,7 @@ class ProgressScreen(Screen):
         with Vertical(id="progress-panel"):
             yield Static("Preparazione", id="step-indicator")
             yield Static(title, id="wizard-title")
-            yield Static("Avvio in corso...", id="status-msg")
+            yield Static(_MSG_STARTING, id="status-msg")
             with Horizontal(id="progress-meter"):
                 yield ProgressBar(
                     total=100,
@@ -1162,7 +1182,7 @@ class ProgressScreen(Screen):
                 yield Button("Apri file", id="btn-open-file")
                 yield Button("Apri cartella", id="btn-open-folder")
                 yield Button("Torna al menu", id="btn-progress-home")
-        yield Static("Ctrl+C per annullare", id="footer-bar")
+        yield Static(_FOOTER_PROGRESS, id="footer-bar")
 
     def on_mount(self) -> None:
         self.query_one("#progress-result-buttons", Vertical).display = False
@@ -1199,16 +1219,8 @@ class ProgressScreen(Screen):
             self.app.call_from_thread(self._on_error, str(e))
 
     def _on_progress(self, p: OperationProgress) -> None:
-        stage_labels = {
-            "prepare": "Preparazione",
-            "render": "Rendering",
-            "ocr": "OCR",
-            "compress": "Compressione",
-            "finalize": "Salvataggio",
-            "done": "Completato",
-        }
         self.query_one("#step-indicator", Static).update(
-            stage_labels.get(p.stage, "Operazione in corso")
+            _STAGE_LABELS.get(p.stage, "Operazione in corso")
         )
         self.query_one("#status-msg", Static).update(p.message)
         percent_label = self.query_one("#progress-percent", Static)
@@ -1256,7 +1268,7 @@ class ProgressScreen(Screen):
         self._show_result(f"Errore: {message}", success=False)
 
     def _on_cancelled(self) -> None:
-        self._show_result("Operazione annullata.", cancelled=True)
+        self._show_result(_MSG_CANCELLED, cancelled=True)
 
     def _show_result(
         self,
@@ -1372,10 +1384,7 @@ class PyDFApp(App):
         self.push_screen(HomeScreen())
         if self._show_startup_checks and not self.global_system_report.ok:
             self.push_screen(
-                SystemCheckScreen(
-                    self.global_system_report,
-                    title="Prerequisiti mancanti",
-                )
+                SystemCheckScreen(self.global_system_report, title=_TITLE_PREREQUISITES)
             )
 
     def save_preferences(self) -> None:
@@ -1400,12 +1409,7 @@ class PyDFApp(App):
         report = check_operation_systems(operation)
         if report.ok:
             return True
-        self.push_screen(
-            SystemCheckScreen(
-                report,
-                title="Prerequisiti mancanti",
-            )
-        )
+        self.push_screen(SystemCheckScreen(report, title=_TITLE_PREREQUISITES))
         return False
 
 
@@ -1416,56 +1420,3 @@ def run_interactive_app() -> int:
     app = PyDFApp()
     app.run()
     return 0
-
-
-def dispatch_interactive_command(
-    command_line: str,
-    *,
-    parser_factory: Callable[[], argparse.ArgumentParser],
-    executor: Callable[[argparse.Namespace], int],
-) -> int:
-    """Esegue un comando CLI testuale (es. 'ocr file.pdf --lang it').
-    Firma invariata — cli.py non cambia.
-    """
-    stripped = command_line.strip()
-    if not stripped:
-        return 0
-
-    try:
-        tokens = shlex.split(stripped)
-    except ValueError as exc:
-        raise PDFToolError(f"Sintassi del comando non valida: {exc}") from exc
-
-    if not tokens:
-        return 0
-
-    command = tokens[0].lower()
-
-    if command in EXIT_COMMANDS:
-        return -1
-
-    if command == "help":
-        if len(tokens) == 1:
-            print(_HELP_TEXT_PLAIN)
-            return 0
-        # "help ocr" / "help compress" / "help check" → argparse --help
-        sub_tokens = tokens[1:] + ["--help"]
-        parser = parser_factory()
-        try:
-            parser.parse_args(sub_tokens)
-        except SystemExit:
-            return 0
-        return 0
-
-    if command == "interactive":
-        return 0
-
-    parser = parser_factory()
-    try:
-        ns = parser.parse_args(tokens)
-    except SystemExit as exc:
-        raise PDFToolError(
-            "Comando non valido. Usa il menu guidato oppure apri Help."
-        ) from exc
-
-    return executor(ns)
