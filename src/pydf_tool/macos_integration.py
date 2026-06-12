@@ -13,7 +13,6 @@ __all__ = [
     "is_macos",
     "open_output_folder",
     "open_with_default_app",
-    "reveal_in_finder",
 ]
 
 
@@ -109,14 +108,6 @@ def open_with_default_app(path: str | Path) -> None:
     _require_macos()
     target = _resolve_existing_target(path)
     _run_open_command(["open", str(target)], "Apertura con l'app di default")
-
-
-def reveal_in_finder(path: str | Path) -> None:
-    """Reveal an existing file or folder in Finder."""
-
-    _require_macos()
-    target = _resolve_existing_target(path)
-    _run_open_command(["open", "-R", str(target)], "Rivelazione in Finder")
 
 
 def open_output_folder(path: str | Path) -> None:

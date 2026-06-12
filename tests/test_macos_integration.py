@@ -10,7 +10,6 @@ from pydf_tool.macos_integration import (
     choose_pdf_file,
     open_output_folder,
     open_with_default_app,
-    reveal_in_finder,
 )
 
 
@@ -163,21 +162,6 @@ class MacOSIntegrationTestCase(unittest.TestCase):
                 open_with_default_app(file_path)
 
         self.assertEqual(captured["command"], ["open", str(file_path)])
-
-    def test_reveal_in_finder_uses_open_r(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir, "report.pdf")
-            file_path.write_bytes(b"%PDF-1.4")
-            captured: dict[str, list[str]] = {}
-
-            def fake_run(command, check, capture_output, text):
-                captured["command"] = command
-                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-
-            with patch("pydf_tool.macos_integration.subprocess.run", side_effect=fake_run):
-                reveal_in_finder(file_path)
-
-        self.assertEqual(captured["command"], ["open", "-R", str(file_path)])
 
     def test_open_output_folder_opens_parent_directory_for_file_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
