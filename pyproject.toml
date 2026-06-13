@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydf-tool"
-version = "1.0.5"
+version = "1.0.6"
 description = "PyDF Tool: OCR e compressione PDF per macOS"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,6 @@ dependencies = [
     "pdf2image==1.17.0",
     "textual>=0.70.0",
     "pypdf==6.8.0",
-    "pytesseract==0.3.13",
     "Pillow>=10.3.0,<12.0",
 ]
 

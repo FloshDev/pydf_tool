@@ -104,7 +104,6 @@ PACKAGES_DIR="$CONTENTS/Resources/pydf-packages"
     "pdf2image==1.17.0" \
     "textual>=0.70.0" \
     "pypdf==6.8.0" \
-    "pytesseract==0.3.13" \
     "Pillow>=10.3.0,<12.0"
 echo "  Dipendenze installate in $PACKAGES_DIR"
 echo ""

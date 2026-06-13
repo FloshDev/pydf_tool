@@ -118,7 +118,6 @@ import_check() {
 
 import_check textual
 import_check pdf2image
-import_check pytesseract
 import_check PIL
 import_check pypdf
 import_check rich
