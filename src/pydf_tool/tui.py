@@ -13,6 +13,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Input, ListItem, ListView, ProgressBar, Static
 
+from . import _subprocess_tracker
 from .check_ocr import CheckOCRResult, check_ocr
 from .compress import CompressionResult, compress_pdf
 from .errors import PDFToolError
@@ -1216,7 +1217,10 @@ class ProgressScreen(Screen):
         except KeyboardInterrupt:
             self.app.call_from_thread(self._on_cancelled)
         except PDFToolError as e:
-            self.app.call_from_thread(self._on_error, str(e))
+            if self._cancel_event.is_set():
+                self.app.call_from_thread(self._on_cancelled)
+            else:
+                self.app.call_from_thread(self._on_error, str(e))
 
     def _on_progress(self, p: OperationProgress) -> None:
         self.query_one("#step-indicator", Static).update(
@@ -1301,6 +1305,7 @@ class ProgressScreen(Screen):
 
     def action_cancel_op(self) -> None:
         self._cancel_event.set()
+        _subprocess_tracker.terminate_all()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-open-file":
@@ -1386,6 +1391,9 @@ class PyDFApp(App):
             self.push_screen(
                 SystemCheckScreen(self.global_system_report, title=_TITLE_PREREQUISITES)
             )
+
+    def on_unmount(self) -> None:
+        _subprocess_tracker.terminate_all()
 
     def save_preferences(self) -> None:
         try:

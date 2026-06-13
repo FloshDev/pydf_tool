@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
+from . import _subprocess_tracker
 from .errors import PDFToolError
 from .progress import OperationProgress, emit_progress
 from .utils import (
@@ -21,6 +25,10 @@ SUPPORTED_LANGUAGE_CODES = {
     "en": "eng",
     "eng": "eng",
 }
+
+# Limit Tesseract OpenMP threads to avoid pegging all CPU cores per page.
+# Also reduces blast radius of orphan tesseract processes after app exit/cancel.
+_TESSERACT_THREAD_LIMIT = "2"
 
 
 @dataclass(frozen=True)
@@ -67,6 +75,130 @@ def resolve_ocr_output_path(input_path: Path, output: str | Path | None) -> Path
     return output_path
 
 
+def _tesseract_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["OMP_THREAD_LIMIT"] = _TESSERACT_THREAD_LIMIT
+    return env
+
+
+def _run_tesseract(args: list[str], action: str) -> subprocess.CompletedProcess[str]:
+    """Run tesseract once, tracked, with thread limit. Raises PDFToolError on failure."""
+    proc: subprocess.Popen[str] | None = None
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_tesseract_env(),
+            start_new_session=True,
+        )
+        _subprocess_tracker.register(proc)
+        stdout, stderr = proc.communicate()
+    except FileNotFoundError as exc:
+        raise PDFToolError(
+            "Tesseract non trovato. Installa `brew install tesseract`."
+        ) from exc
+    finally:
+        if proc is not None:
+            _subprocess_tracker.unregister(proc)
+
+    if proc.returncode != 0:
+        detail = (stderr or "").strip() or (stdout or "").strip() or "errore sconosciuto"
+        raise PDFToolError(f"{action} fallito: {detail}")
+    return subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
+
+
+def _tesseract_available_languages() -> set[str]:
+    try:
+        completed = _run_tesseract(["tesseract", "--list-langs"], "Lettura lingue Tesseract")
+    except PDFToolError:
+        raise PDFToolError(
+            "Impossibile leggere le lingue disponibili da Tesseract. "
+            "Verifica l'installazione di `tesseract`."
+        )
+    languages: set[str] = set()
+    for line in (completed.stdout or "").splitlines():
+        cleaned = line.strip()
+        if not cleaned or cleaned.lower().startswith("list of available"):
+            continue
+        languages.add(cleaned)
+    return languages
+
+
+def _save_image_to_temp_png(image, directory: Path) -> Path:
+    image_path = directory / "page.png"
+    image.save(str(image_path), format="PNG")
+    return image_path
+
+
+def _tesseract_image_to_text(image, lang: str, page_num: int) -> str:
+    with tempfile.TemporaryDirectory(prefix="pydf-tool-ocr-") as temp_dir:
+        temp_path = Path(temp_dir)
+        image_path = _save_image_to_temp_png(image, temp_path)
+        output_base = temp_path / "out"
+        try:
+            _run_tesseract(
+                [
+                    "tesseract",
+                    str(image_path),
+                    str(output_base),
+                    "-l",
+                    lang,
+                    "--oem",
+                    "1",
+                    "--psm",
+                    "6",
+                ],
+                f"OCR pagina {page_num}",
+            )
+        except PDFToolError:
+            raise PDFToolError(
+                f"OCR fallito sulla pagina {page_num}. "
+                "Verifica lingua OCR e installazione di Tesseract."
+            )
+        text_path = output_base.with_suffix(".txt")
+        if not text_path.exists():
+            raise PDFToolError(
+                f"OCR fallito sulla pagina {page_num}: output testuale non generato."
+            )
+        return text_path.read_text(encoding="utf-8").strip()
+
+
+def _tesseract_image_to_pdf(image, lang: str, page_num: int) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="pydf-tool-ocr-") as temp_dir:
+        temp_path = Path(temp_dir)
+        image_path = _save_image_to_temp_png(image, temp_path)
+        output_base = temp_path / "out"
+        try:
+            _run_tesseract(
+                [
+                    "tesseract",
+                    str(image_path),
+                    str(output_base),
+                    "-l",
+                    lang,
+                    "--oem",
+                    "1",
+                    "--psm",
+                    "6",
+                    "pdf",
+                ],
+                f"OCR pagina {page_num}",
+            )
+        except PDFToolError:
+            raise PDFToolError(
+                f"Generazione del PDF OCR fallita sulla pagina {page_num}. "
+                "Verifica il PDF di input e l'installazione OCR."
+            )
+        pdf_path = output_base.with_suffix(".pdf")
+        if not pdf_path.exists():
+            raise PDFToolError(
+                f"Generazione del PDF OCR fallita sulla pagina {page_num}: output non generato."
+            )
+        return pdf_path.read_bytes()
+
+
 def run_ocr(
     input_path: str | Path,
     output_path: str | Path | None = None,
@@ -74,7 +206,6 @@ def run_ocr(
     progress_callback: Callable[[OperationProgress], None] | None = None,
 ) -> OCRResult:
     try:
-        import pytesseract
         from pdf2image import convert_from_path
         from pypdf import PdfReader, PdfWriter
     except ImportError as exc:
@@ -105,14 +236,7 @@ def run_ocr(
         total=page_count,
     )
 
-    try:
-        available_languages = set(pytesseract.get_languages(config=""))
-    except Exception as exc:
-        raise PDFToolError(
-            "Impossibile leggere le lingue disponibili da Tesseract. "
-            "Verifica l'installazione di `tesseract`."
-        ) from exc
-
+    available_languages = _tesseract_available_languages()
     requested_languages = set(tesseract_lang.split("+"))
     missing_languages = sorted(requested_languages - available_languages)
     if missing_languages:
@@ -161,14 +285,7 @@ def run_ocr(
                 image = page_imgs[0]
                 del page_imgs
                 try:
-                    text = pytesseract.image_to_string(
-                        image, lang=tesseract_lang, config="--oem 1 --psm 6"
-                    ).strip()
-                except Exception as exc:
-                    raise PDFToolError(
-                        f"OCR fallito sulla pagina {page_num}. "
-                        "Verifica lingua OCR e installazione di Tesseract."
-                    ) from exc
+                    text = _tesseract_image_to_text(image, tesseract_lang, page_num)
                 finally:
                     del image
                 page_header = f"--- Pagina {page_num} ---"
@@ -222,19 +339,9 @@ def run_ocr(
             image = page_imgs[0]
             del page_imgs
             try:
-                searchable_page = pytesseract.image_to_pdf_or_hocr(
-                    image,
-                    extension="pdf",
-                    lang=tesseract_lang,
-                    config="--oem 1 --psm 6",
-                )
+                searchable_page = _tesseract_image_to_pdf(image, tesseract_lang, page_num)
                 page_reader = PdfReader(BytesIO(searchable_page))
                 writer.add_page(page_reader.pages[0])
-            except Exception as exc:
-                raise PDFToolError(
-                    f"Generazione del PDF OCR fallita sulla pagina {page_num}. "
-                    "Verifica il PDF di input e l'installazione OCR."
-                ) from exc
             finally:
                 del image
             emit_progress(
@@ -299,15 +406,7 @@ def run_ocr(
     if destination.suffix.lower() == ".txt":
         page_texts_batch: list[str] = []
         for index, image in enumerate(images, start=1):
-            try:
-                text = pytesseract.image_to_string(
-                    image, lang=tesseract_lang, config="--oem 1 --psm 6"
-                ).strip()
-            except Exception as exc:
-                raise PDFToolError(
-                    f"OCR fallito sulla pagina {index}. "
-                    "Verifica lingua OCR e installazione di Tesseract."
-                ) from exc
+            text = _tesseract_image_to_text(image, tesseract_lang, index)
             page_header = f"--- Pagina {index} ---"
             page_texts_batch.append(
                 page_header if not text else f"{page_header}\n{text}"
@@ -340,20 +439,9 @@ def run_ocr(
 
     writer = PdfWriter()
     for index, image in enumerate(images, start=1):
-        try:
-            searchable_page = pytesseract.image_to_pdf_or_hocr(
-                image,
-                extension="pdf",
-                lang=tesseract_lang,
-                config="--oem 1 --psm 6",
-            )
-            page_reader = PdfReader(BytesIO(searchable_page))
-            writer.add_page(page_reader.pages[0])
-        except Exception as exc:
-            raise PDFToolError(
-                f"Generazione del PDF OCR fallita sulla pagina {index}. "
-                "Verifica il PDF di input e l'installazione OCR."
-            ) from exc
+        searchable_page = _tesseract_image_to_pdf(image, tesseract_lang, index)
+        page_reader = PdfReader(BytesIO(searchable_page))
+        writer.add_page(page_reader.pages[0])
         emit_progress(
             progress_callback,
             stage="ocr",

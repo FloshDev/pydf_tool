@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import _subprocess_tracker
 from .errors import PDFToolError
 from .progress import OperationProgress, emit_progress
 from .utils import (
@@ -184,13 +185,23 @@ def compress_pdf(
         if progress_callback is None:
             quiet_command = command.copy()
             quiet_command.append("-dQUIET")
+            quiet_process: subprocess.Popen[str] | None = None
             try:
-                subprocess.run(
-                    quiet_command, check=True, capture_output=True, text=True
+                quiet_process = subprocess.Popen(
+                    quiet_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
                 )
-            except subprocess.CalledProcessError as exc:
-                details = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-                raise PDFToolError(f"Compressione fallita: {details}") from exc
+                _subprocess_tracker.register(quiet_process)
+                stdout, stderr = quiet_process.communicate()
+                if quiet_process.returncode != 0:
+                    details = (stderr or "").strip() or (stdout or "").strip() or "errore sconosciuto"
+                    raise PDFToolError(f"Compressione fallita: {details}")
+            finally:
+                if quiet_process is not None:
+                    _subprocess_tracker.unregister(quiet_process)
         else:
             process: subprocess.Popen[str] | None = None
             output_chunks: list[str] = []
@@ -201,7 +212,9 @@ def compress_pdf(
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    start_new_session=True,
                 )
+                _subprocess_tracker.register(process)
                 emit_progress(
                     progress_callback,
                     stage="compress",
@@ -239,12 +252,7 @@ def compress_pdf(
                     )
             except KeyboardInterrupt:
                 if process is not None and process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
+                    _subprocess_tracker._terminate(process)
                 if staged_destination.exists():
                     staged_destination.unlink(missing_ok=True)
                 raise
@@ -254,8 +262,10 @@ def compress_pdf(
                 details = (exc.output or "").strip() or str(exc)
                 raise PDFToolError(f"Compressione fallita: {details}") from exc
             finally:
-                if process is not None and process.stdout is not None:
-                    process.stdout.close()
+                if process is not None:
+                    _subprocess_tracker.unregister(process)
+                    if process.stdout is not None:
+                        process.stdout.close()
 
         if not staged_destination.exists():
             raise PDFToolError("Compressione fallita: file di output non generato.")

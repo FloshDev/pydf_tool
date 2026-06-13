@@ -698,20 +698,28 @@ class CompressionHelpersTestCase(unittest.TestCase):
             input_path.write_bytes(b"original-pdf")
             captured: dict[str, list[str]] = {}
 
-            def fake_run(command, check, capture_output, text):
-                captured["command"] = command
-                staged_output = Path(
-                    next(
-                        part.split("=", 1)[1]
-                        for part in command
-                        if part.startswith("-sOutputFile=")
+            class FakePopen:
+                def __init__(self, command, **kwargs) -> None:
+                    captured["command"] = command
+                    staged_output = Path(
+                        next(
+                            part.split("=", 1)[1]
+                            for part in command
+                            if part.startswith("-sOutputFile=")
+                        )
                     )
-                )
-                staged_output.write_bytes(b"small")
-                return None
+                    staged_output.write_bytes(b"small")
+                    self.returncode = 0
+                    self.pid = 0
+
+                def communicate(self):
+                    return ("", "")
+
+                def poll(self):
+                    return self.returncode
 
             with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                with patch("pydf_tool.compress.subprocess.run", side_effect=fake_run):
+                with patch("pydf_tool.compress.subprocess.Popen", FakePopen):
                     result = compress_pdf(input_path, output_path, level="high")
 
         self.assertEqual(result.output_path, output_path)
@@ -729,20 +737,28 @@ class CompressionHelpersTestCase(unittest.TestCase):
             input_path.write_bytes(b"original-pdf")
             captured: dict[str, list[str]] = {}
 
-            def fake_run(command, check, capture_output, text):
-                captured["command"] = command
-                staged_output = Path(
-                    next(
-                        part.split("=", 1)[1]
-                        for part in command
-                        if part.startswith("-sOutputFile=")
+            class FakePopen:
+                def __init__(self, command, **kwargs) -> None:
+                    captured["command"] = command
+                    staged_output = Path(
+                        next(
+                            part.split("=", 1)[1]
+                            for part in command
+                            if part.startswith("-sOutputFile=")
+                        )
                     )
-                )
-                staged_output.write_bytes(b"small")
-                return None
+                    staged_output.write_bytes(b"small")
+                    self.returncode = 0
+                    self.pid = 0
+
+                def communicate(self):
+                    return ("", "")
+
+                def poll(self):
+                    return self.returncode
 
             with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                with patch("pydf_tool.compress.subprocess.run", side_effect=fake_run):
+                with patch("pydf_tool.compress.subprocess.Popen", FakePopen):
                     result = compress_pdf(
                         input_path,
                         output_path,
@@ -760,7 +776,7 @@ class CompressionHelpersTestCase(unittest.TestCase):
                 self.pages = [object(), object()]
 
         class FakePopen:
-            def __init__(self, command, stdout, stderr, text) -> None:
+            def __init__(self, command, **kwargs) -> None:
                 self.command = command
                 self.stdout = io.StringIO("Page 1\nPage 2\n")
                 output_arg = next(
@@ -769,6 +785,8 @@ class CompressionHelpersTestCase(unittest.TestCase):
                 output_path = Path(output_arg.split("=", 1)[1])
                 output_path.write_bytes(b"compressed")
                 self._returncode = 0
+                self.returncode = 0
+                self.pid = 0
 
             def wait(self, timeout=None):
                 return self._returncode
@@ -813,20 +831,28 @@ class CompressionHelpersTestCase(unittest.TestCase):
             input_path.write_bytes(b"original-pdf")
             captured: dict[str, list[str]] = {}
 
-            def fake_run(command, check, capture_output, text):
-                captured["command"] = command
-                staged_output = Path(
-                    next(
-                        part.split("=", 1)[1]
-                        for part in command
-                        if part.startswith("-sOutputFile=")
+            class FakePopen:
+                def __init__(self, command, **kwargs) -> None:
+                    captured["command"] = command
+                    staged_output = Path(
+                        next(
+                            part.split("=", 1)[1]
+                            for part in command
+                            if part.startswith("-sOutputFile=")
+                        )
                     )
-                )
-                staged_output.write_bytes(b"small")
-                return None
+                    staged_output.write_bytes(b"small")
+                    self.returncode = 0
+                    self.pid = 0
+
+                def communicate(self):
+                    return ("", "")
+
+                def poll(self):
+                    return self.returncode
 
             with patch("pydf_tool.compress.shutil.which", return_value="/usr/local/bin/gs"):
-                with patch("pydf_tool.compress.subprocess.run", side_effect=fake_run):
+                with patch("pydf_tool.compress.subprocess.Popen", FakePopen):
                     result = compress_pdf(input_path, output_path, level="medium")
 
             self.assertEqual(result.output_path, output_path)
@@ -838,20 +864,48 @@ class CompressionHelpersTestCase(unittest.TestCase):
             self.assertNotEqual(source_arg, str(input_path))
 
 
+class _FakeImage:
+    def save(self, path, format="PNG"):
+        Path(path).write_bytes(b"fake-png")
+
+
+def _make_fake_tesseract_popen(text_payload: str = "ciao", fail: bool = False):
+    """Build a FakePopen that simulates tesseract: writes .txt/.pdf next to output base."""
+
+    class FakeTesseractPopen:
+        def __init__(self, command, **kwargs) -> None:
+            self.command = command
+            self.returncode = 1 if fail else 0
+            self.pid = 0
+            if not fail and command[0] == "tesseract" and len(command) > 2 and command[1] != "--list-langs":
+                output_base = Path(command[2])
+                if command[-1] == "pdf":
+                    output_base.with_suffix(".pdf").write_bytes(b"%PDF-1.4\nfake")
+                else:
+                    output_base.with_suffix(".txt").write_text(text_payload, encoding="utf-8")
+
+        def communicate(self):
+            if self.command[0] == "tesseract" and "--list-langs" in self.command:
+                return ("List of available languages\nita\neng\n", "")
+            if fail:
+                return ("", "boom")
+            return ("", "")
+
+        def poll(self):
+            return self.returncode
+
+    return FakeTesseractPopen
+
+
 class OCRRuntimeTestCase(unittest.TestCase):
     def test_run_ocr_uses_pdftoppm_when_pdftocairo_missing(self) -> None:
-        fake_pytesseract = types.SimpleNamespace(
-            get_languages=lambda config="": ["ita"],
-            image_to_string=lambda image, lang="", config="": "ciao",
-        )
-
         convert_calls: dict[str, object] = {}
 
-        def fake_convert_from_path(path, dpi, use_pdftocairo):
+        def fake_convert_from_path(path, dpi, use_pdftocairo, first_page=None, last_page=None):
             convert_calls["path"] = path
             convert_calls["dpi"] = dpi
             convert_calls["use_pdftocairo"] = use_pdftocairo
-            return ["image-1"]
+            return [_FakeImage()]
 
         fake_pdf2image = types.SimpleNamespace(convert_from_path=fake_convert_from_path)
         fake_pypdf = types.SimpleNamespace(PdfReader=object, PdfWriter=object)
@@ -864,7 +918,6 @@ class OCRRuntimeTestCase(unittest.TestCase):
             with patch.dict(
                 sys.modules,
                 {
-                    "pytesseract": fake_pytesseract,
                     "pdf2image": fake_pdf2image,
                     "pypdf": fake_pypdf,
                 },
@@ -877,7 +930,11 @@ class OCRRuntimeTestCase(unittest.TestCase):
                         "pdftocairo": None,
                     }.get(name),
                 ):
-                    result = run_ocr(input_path, output_path=output_path, lang="it")
+                    with patch(
+                        "pydf_tool.ocr.subprocess.Popen",
+                        _make_fake_tesseract_popen(),
+                    ):
+                        result = run_ocr(input_path, output_path=output_path, lang="it")
 
         self.assertEqual(result.output_type, "txt")
         self.assertFalse(convert_calls["use_pdftocairo"])
@@ -887,12 +944,8 @@ class OCRRuntimeTestCase(unittest.TestCase):
             def __init__(self, _source) -> None:
                 self.pages = [object(), object()]
 
-        fake_pytesseract = types.SimpleNamespace(
-            get_languages=lambda config="": ["ita"],
-            image_to_string=lambda image, lang="", config="": "ciao",
-        )
         fake_pdf2image = types.SimpleNamespace(
-            convert_from_path=lambda path, dpi, use_pdftocairo, first_page=None, last_page=None: ["image-1"]
+            convert_from_path=lambda path, dpi, use_pdftocairo, first_page=None, last_page=None: [_FakeImage()]
         )
         fake_pypdf = types.SimpleNamespace(PdfReader=FakePdfReader, PdfWriter=object)
         updates = []
@@ -905,7 +958,6 @@ class OCRRuntimeTestCase(unittest.TestCase):
             with patch.dict(
                 sys.modules,
                 {
-                    "pytesseract": fake_pytesseract,
                     "pdf2image": fake_pdf2image,
                     "pypdf": fake_pypdf,
                 },
@@ -918,26 +970,24 @@ class OCRRuntimeTestCase(unittest.TestCase):
                         "pdftocairo": None,
                     }.get(name),
                 ):
-                    result = run_ocr(
-                        input_path,
-                        output_path=output_path,
-                        lang="it",
-                        progress_callback=updates.append,
-                    )
+                    with patch(
+                        "pydf_tool.ocr.subprocess.Popen",
+                        _make_fake_tesseract_popen(),
+                    ):
+                        result = run_ocr(
+                            input_path,
+                            output_path=output_path,
+                            lang="it",
+                            progress_callback=updates.append,
+                        )
 
         self.assertEqual(result.output_type, "txt")
         self.assertTrue(any(update.stage == "ocr" for update in updates))
         self.assertTrue(any(update.completed == 2 for update in updates))
 
     def test_run_ocr_wraps_runtime_errors(self) -> None:
-        fake_pytesseract = types.SimpleNamespace(
-            get_languages=lambda config="": ["ita"],
-            image_to_string=lambda image, lang="", config="": (_ for _ in ()).throw(
-                RuntimeError("ocr boom")
-            ),
-        )
         fake_pdf2image = types.SimpleNamespace(
-            convert_from_path=lambda path, dpi, use_pdftocairo: ["image-1"]
+            convert_from_path=lambda path, dpi, use_pdftocairo, first_page=None, last_page=None: [_FakeImage()]
         )
         fake_pypdf = types.SimpleNamespace(PdfReader=object, PdfWriter=object)
 
@@ -949,7 +999,6 @@ class OCRRuntimeTestCase(unittest.TestCase):
             with patch.dict(
                 sys.modules,
                 {
-                    "pytesseract": fake_pytesseract,
                     "pdf2image": fake_pdf2image,
                     "pypdf": fake_pypdf,
                 },
@@ -962,8 +1011,12 @@ class OCRRuntimeTestCase(unittest.TestCase):
                         "pdftocairo": None,
                     }.get(name),
                 ):
-                    with self.assertRaises(PDFToolError):
-                        run_ocr(input_path, output_path=output_path, lang="it")
+                    with patch(
+                        "pydf_tool.ocr.subprocess.Popen",
+                        _make_fake_tesseract_popen(fail=True),
+                    ):
+                        with self.assertRaises(PDFToolError):
+                            run_ocr(input_path, output_path=output_path, lang="it")
 
 
 class CLITestCase(unittest.TestCase):
